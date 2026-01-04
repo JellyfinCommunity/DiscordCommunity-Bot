@@ -1,0 +1,94 @@
+{
+  "third_party_clients": [
+    {
+      "id": "streamyfin",
+      "name": "Streamyfin",
+      "description": "Modern Jellyfin client for iOS",
+      "developers": [
+        {
+          "name": "Streamyfin Team",
+          "link": "https://github.com/streamyfin"
+        }
+      ],
+      "repo": "https://github.com/streamyfin/streamyfin",
+      "lastChecked": "2026-01-04T17:11:31.094Z",
+      "lastRelease": {
+        "tag": "v0.47.1",
+        "url": "https://github.com/streamyfin/streamyfin/releases/tag/v0.47.1",
+        "published_at": "2025-11-13T06:48:42Z"
+      }
+    },
+    {
+      "id": "afinity",
+      "name": "AFinity",
+      "description": "Native Android client built with Jetpack Compose",
+      "developers": [
+        {
+          "name": "MakD",
+          "link": "https://github.com/MakD"
+        }
+      ],
+      "repo": "https://github.com/MakD/AFinity",
+      "lastChecked": "2026-01-04T17:11:31.094Z",
+      "lastRelease": {
+        "tag": "v0.2.8-beta",
+        "url": "https://github.com/MakD/AFinity/releases/tag/v0.2.8-beta",
+        "published_at": "2025-12-31T17:03:57Z"
+      }
+    }
+  ],
+  "plugins": [
+    {
+      "id": "jellyfin-enhanced",
+      "name": "Jellyfin Enhanced",
+      "description": "Essential enhancement suite with advanced features and customizations",
+      "repo": "https://github.com/n00bcodr/Jellyfin-Enhanced",
+      "lastChecked": "2026-01-04T17:11:31.094Z",
+      "lastRelease": {
+        "tag": "10.0.0.0",
+        "url": "https://github.com/n00bcodr/Jellyfin-Enhanced/releases/tag/10.0.0.0",
+        "published_at": "2026-01-04T00:42:55Z"
+      }
+    },
+    {
+      "id": "kefin-tweaks",
+      "name": "KefinTweaks",
+      "description": "Comprehensive collection of enhancements filling functionality gaps",
+      "repo": "https://github.com/ranaldsgift/KefinTweaks",
+      "lastChecked": "2026-01-04T17:11:31.094Z",
+      "lastRelease": {
+        "tag": "v0.4.5",
+        "url": "https://github.com/ranaldsgift/KefinTweaks/releases/tag/v0.4.5",
+        "published_at": "2025-12-10T23:15:47Z"
+      }
+    }
+  ],
+  "services": [
+    {
+      "id": "anchorr",
+      "name": "Anchorr",
+      "description": "Discord bot for media requests via Jellyseerr and Jellyfin notifications",
+      "repo": "https://github.com/nairdahh/Anchorr",
+      "statusUrl": null,
+      "lastChecked": "2026-01-04T17:11:31.094Z",
+      "lastRelease": {
+        "tag": "v1.3.5",
+        "url": "https://github.com/nairdahh/Anchorr/releases/tag/v1.3.5",
+        "published_at": "2025-12-26T20:22:58Z"
+      }
+    },
+    {
+      "id": "streamystats",
+      "name": "Streamystats",
+      "description": "Statistics service with analytics, AI chat, and data visualization",
+      "repo": "https://github.com/fredrikburmester/streamystats",
+      "statusUrl": null,
+      "lastChecked": "2026-01-04T17:11:31.094Z",
+      "lastRelease": {
+        "tag": "v2.16.0",
+        "url": "https://github.com/fredrikburmester/streamystats/releases/tag/v2.16.0",
+        "published_at": "2025-12-31T12:26:45Z"
+      }
+    }
+  ]
+}
