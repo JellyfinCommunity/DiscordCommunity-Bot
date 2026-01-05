@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder } from "discord.js";
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from "discord.js";
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -51,7 +51,7 @@ export default {
                 if (!service) {
                     await interaction.reply({
                         content: "❌ Service not found. Use `/services` to see available services.",
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                     return;
                 }
@@ -86,6 +86,22 @@ export default {
                     });
                 }
 
+                if (service.developers && service.developers.length > 0) {
+                    const devList = service.developers.map(dev => {
+                        if (typeof dev === 'string') {
+                            return dev;
+                        }
+                        const name = dev.name || 'Unknown';
+                        const discordUser = dev.discord_username ? ` (<@${dev.discord_username}>)` : '';
+                        return `${name}${discordUser}`;
+                    }).join(', ');
+                    embed.addFields({
+                        name: "👥 Developers",
+                        value: devList,
+                        inline: false
+                    });
+                }
+
                 await interaction.reply({ embeds: [embed] });
             } else {
                 // Show all services list
@@ -116,7 +132,7 @@ export default {
             console.error('Error executing services command:', error);
             await interaction.reply({
                 content: "❌ An error occurred while fetching service information.",
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }

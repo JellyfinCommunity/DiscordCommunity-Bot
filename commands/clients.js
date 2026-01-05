@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder } from "discord.js";
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from "discord.js";
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -51,7 +51,7 @@ export default {
                 if (!client) {
                     await interaction.reply({
                         content: "❌ Client not found. Use `/clients` to see available clients.",
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                     return;
                 }
@@ -94,7 +94,7 @@ export default {
                 if (clients.length === 0) {
                     await interaction.reply({
                         content: "No third-party clients found in the database.",
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                     return;
                 }
@@ -128,7 +128,7 @@ export default {
             console.error('Error executing clients command:', error);
             await interaction.reply({
                 content: "❌ An error occurred while fetching client information.",
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }

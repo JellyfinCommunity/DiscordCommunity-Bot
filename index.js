@@ -69,7 +69,7 @@ client.on('interactionCreate', async interaction => {
       await command.execute(interaction);
     } catch (error) {
       console.error(error);
-      await interaction.reply({ content: 'There was an error executing that command.', MessageFlags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: 'There was an error executing that command.', flags: MessageFlags.Ephemeral });
     }
   } else if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);
