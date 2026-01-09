@@ -13,17 +13,27 @@ function createPluginEmbed(plugin) {
     const isFeatured = featuredProjects.some(id => plugin.id.includes(id) || plugin.name.toLowerCase().includes(id));
     
     const embed = new EmbedBuilder()
-        .setColor(isFeatured ? 0xFFD700 : 0x00D4AA) // Gold for featured, teal for others
+        .setColor(isFeatured ? 0xFFD700 : 0x00D4AA)
+        .setAuthor({
+            name: "Jellyfin Plugins",
+            iconURL: "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/web/icon-transparent.png",
+            url: "https://jellyfin.org/docs/general/server/plugins"
+        })
         .setTitle(`${isFeatured ? '⭐ ' : ''}${plugin.name}`)
         .setURL(plugin.repo)
         .setDescription(plugin.description || 'No description available')
-        .addFields(
-            { name: "🔗 Repository", value: `[View on GitHub](${plugin.repo})`, inline: false }
-        )
         .setFooter({ text: isFeatured ? "⭐ Developer active on this server" : "Use /plugins to browse all available plugins" });
 
-    if (plugin.logo) {
-        embed.setThumbnail(plugin.logo);
+    if (plugin.logo || plugin.icon || plugin.image) {
+        embed.setThumbnail(plugin.logo || plugin.icon || plugin.image);
+    }
+
+    if (plugin.repo) {
+        embed.addFields({ 
+            name: "🔗 Repository", 
+            value: `[View on GitHub](${plugin.repo})`, 
+            inline: false 
+        });
     }
 
     if (plugin.developers && plugin.developers.length > 0) {
@@ -32,7 +42,7 @@ function createPluginEmbed(plugin) {
                 return dev;
             }
             const name = dev.name || 'Unknown';
-            const discordUser = dev.discord_username ? ` (<@${dev.discord_username}>)` : '';
+            const discordUser = dev.discord_username ? ` (${dev.discord_username})` : '';
             return `${name}${discordUser}`;
         }).join(', ');
         embed.addFields({
