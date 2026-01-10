@@ -25,3 +25,5 @@ tmp/
 temp/
 
 docker-compose.yml
+
+reminders.json
