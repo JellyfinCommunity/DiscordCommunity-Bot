@@ -50,6 +50,20 @@ function createClientEmbed(client) {
             value: devList,
             inline: false
         });
+
+        // Add Discord channel links if available
+        const channelLinks = client.developers
+            .filter(dev => typeof dev === 'object' && dev.discord_channel)
+            .map(dev => `<#${dev.discord_channel}>`)
+            .join(', ');
+        
+        if (channelLinks) {
+            embed.addFields({
+                name: "💬 Discord Channels",
+                value: channelLinks,
+                inline: false
+            });
+        }
     }
 
     if (client.lastRelease) {
