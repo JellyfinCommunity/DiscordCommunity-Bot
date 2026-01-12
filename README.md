@@ -1,4 +1,14 @@
-# JellyfinCommunity Discord Bot
+<p align="center">
+  <img src="https://i.ibb.co/PzmPtyWQ/github-banner.jpg" alt="JellyfinCommunity" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://discord.gg/wH6Z75Yaeb">
+    <img alt="JellyfinCommunity" src="https://img.shields.io/badge/Discord-Streamyfin-blue?style=flat-square&logo=discord">
+      <a href="https://www.reddit.com/r/JellyfinCommunity/">
+    <img alt="JellyfinCommunity" src="https://img.shields.io/badge/Reddit-JellyfinCommunity-orange?style=flat-square&logo=reddit">
+  </a>
+</p>
 
 A Discord bot for the [JellyfinCommunity Discord Server](https://discord.gg/MTM8dkjr93) providing easy access to community-developed clients, plugins, and services.
 
