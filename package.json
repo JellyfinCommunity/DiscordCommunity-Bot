@@ -13,9 +13,6 @@
   "license": "ISC",
   "author": "retardgerman",
   "type": "module",
-  "engines": {
-    "node": ">=25.0.0"
-  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "commit": "git-cz"
