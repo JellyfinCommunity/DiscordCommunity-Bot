@@ -1,5 +1,5 @@
 
-FROM dhi.io/node:20
+FROM dhi.io/node:25
 
 WORKDIR /app
 
