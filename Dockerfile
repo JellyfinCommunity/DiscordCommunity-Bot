@@ -1,12 +1,9 @@
-
-FROM node:22
+FROM dhi.io/node:22-debian12-dev
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
 
-# Install dependencies
 RUN npm ci --omit=dev
 
 COPY . .
