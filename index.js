@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { Client, Collection, GatewayIntentBits, REST, Routes, MessageFlags } from 'discord.js';
 import { initializeReminders } from './reminderManager.js';
-// import { initializeUpdateMonitor } from './updateMonitor.js'; // TEMPORARILY DISABLED
+import { initializeUpdateMonitor } from './updateMonitor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,8 +44,8 @@ client.once('ready', async () => {
   // Initialize reminder system
   await initializeReminders(client);
 
-  // Initialize update monitor - TEMPORARILY DISABLED
-  // await initializeUpdateMonitor(client);
+  // Initialize update monitor
+  await initializeUpdateMonitor(client);
 
   try {
     console.log('📥 Registering slash commands...');

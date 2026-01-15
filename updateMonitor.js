@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import cron from 'node-cron';
 import { EmbedBuilder } from 'discord.js';
+import { COLORS } from './config.js';
 
 const DATA_FILE = path.join(process.cwd(), 'data.json');
 const UPDATE_CHANNEL_ID = process.env.UPDATE_CHANNEL_ID;
@@ -124,11 +125,11 @@ async function sendUpdateNotification(client, item, release, category) {
 
         const releaseDate = new Date(release.published_at);
         
-        // Set color and icons based on category
-        const colors = {
-            third_party_clients: 0x3498DB,
-            plugins: 0x00D4AA,
-            services: 0xFF6B35
+        // Map category keys to config keys
+        const categoryColorMap = {
+            third_party_clients: COLORS.clients,
+            plugins: COLORS.plugins,
+            services: COLORS.services
         };
         
         const categoryInfo = {
@@ -140,7 +141,7 @@ async function sendUpdateNotification(client, item, release, category) {
         const categoryData = categoryInfo[category] || { icon: "📦", name: "Update" };
 
         const embed = new EmbedBuilder()
-            .setColor(colors[category] || 0x00FF00)
+            .setColor(categoryColorMap[category] || 0x00FF00)
             .setAuthor({
                 name: `New ${categoryData.name} Release!`,
                 iconURL: "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/web/icon-transparent.png"
