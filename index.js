@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { Client, Collection, GatewayIntentBits, REST, Routes, MessageFlags } from 'discord.js';
 import { initializeReminders } from './reminderManager.js';
 import { initializeUpdateMonitor } from './updateMonitor.js';
+const { initRedditFeed } = require('./redditRssFeed');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,6 +41,11 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 client.once('ready', async () => {
   console.log(`✅ Bot is online as ${client.user.tag}`);
+
+  // Initialize Reddit RSS feed monitor
+  const redditChannelId = process.env.REDDIT_CHANNEL_ID || 'YOUR_CHANNEL_ID';
+  initRedditFeed(client, redditChannelId);   
+  
 
   // Initialize reminder system
   await initializeReminders(client);
