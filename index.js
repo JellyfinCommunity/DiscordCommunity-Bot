@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { Client, Collection, GatewayIntentBits, REST, Routes, MessageFlags } from 'discord.js';
 import { initializeReminders } from './reminderManager.js';
 import { initializeUpdateMonitor } from './updateMonitor.js';
-const { initRedditFeed } = require('./redditRssFeed');
+import { initRedditFeed } from './redditRssFeed.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

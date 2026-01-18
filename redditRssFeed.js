@@ -1,5 +1,5 @@
 // Import RSS Parser
-const Parser = require('rss-parser');
+import Parser from 'rss-parser';
 const parser = new Parser();
 
 // Configuration
@@ -122,4 +122,4 @@ function cleanDescription(text) {
     return cleaned;
 }
 
-module.exports = { initRedditFeed };
+export { initRedditFeed };
