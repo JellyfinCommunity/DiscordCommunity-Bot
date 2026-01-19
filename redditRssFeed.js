@@ -85,7 +85,8 @@ async function postItem(channel, item) {
         title: item.title,
         url: item.link,
         author: {
-            name: `u/${item.author || 'Unknown'}`,
+            name: `u/${(item.author || 'Unknown').replace(/^\/?u\//, '')}`,
+            url: `https://www.reddit.com/user/${(item.author || 'Unknown').replace(/^\/?u\//, '')}`,
         },
         description: description || undefined,
         fields: [],
