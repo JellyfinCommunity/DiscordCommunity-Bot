@@ -27,3 +27,6 @@ temp/
 docker-compose.yml
 
 reminders.json
+
+# Claude Code
+.claude/
