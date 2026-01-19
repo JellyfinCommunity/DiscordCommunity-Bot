@@ -64,24 +64,54 @@ async function initRedditFeed(client, channelId) {
  * @param {Object} item - RSS feed item
  */
 async function postItem(channel, item) {
+    // Extract image URL and text content from the post
+    const { imageUrl, textContent } = extractContent(item.content || item.contentSnippet || '');
+
+    // Extract flair from categories if available
+    const flair = item.categories && item.categories.length > 0 ? item.categories[0] : null;
+
+    // Build description with image URL link if present
+    let description = '';
+    if (imageUrl) {
+        description += `${imageUrl}\n\n`;
+    }
+    if (textContent) {
+        description += textContent;
+    }
+
     // Create Discord embed message
     const embed = {
-        color: 0x0099ff, // Blue color
+        color: 0xFF5700, // Reddit/Jellyfin orange color
         title: item.title,
         url: item.link,
         author: {
-            name: item.author || 'Unknown',
+            name: `u/${item.author || 'Unknown'}`,
         },
-        description: cleanDescription(item.contentSnippet || item.content),
+        description: description || undefined,
+        fields: [],
         timestamp: new Date(item.pubDate),
         footer: {
             text: 'r/JellyfinCommunity',
         },
     };
 
-    // Add thumbnail if available
-    if (item.enclosure && item.enclosure.url) {
-        embed.thumbnail = { url: item.enclosure.url };
+    // Add flair field if available
+    if (flair) {
+        embed.fields.push({
+            name: 'Flair',
+            value: flair,
+            inline: false,
+        });
+    }
+
+    // Remove empty fields array if no fields
+    if (embed.fields.length === 0) {
+        delete embed.fields;
+    }
+
+    // Add thumbnail if we found an image
+    if (imageUrl) {
+        embed.thumbnail = { url: imageUrl };
     }
 
     // Send to Discord
@@ -120,30 +150,67 @@ async function checkForNewPosts(channel) {
 }
 
 /**
- * Clean and truncate description text
- * @param {string} text - Raw description text
- * @returns {string} Cleaned description
+ * Extract image URL and text content from HTML content
+ * @param {string} html - Raw HTML content
+ * @returns {Object} Object with imageUrl and textContent
  */
-function cleanDescription(text) {
-    if (!text) return '';
-    
-    // Remove HTML tags
-    let cleaned = text.replace(/<[^>]*>/g, '');
-    
+function extractContent(html) {
+    if (!html) return { imageUrl: null, textContent: '' };
+
+    let imageUrl = null;
+    let textContent = '';
+
+    // Extract image URL from img tags or preview.redd.it links
+    const imgMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (imgMatch) {
+        imageUrl = decodeHtmlEntities(imgMatch[1]);
+    }
+
+    // Also check for preview.redd.it or i.redd.it links in href
+    if (!imageUrl) {
+        const linkMatch = html.match(/href=["'](https?:\/\/(?:preview|i)\.redd\.it\/[^"']+)["']/i);
+        if (linkMatch) {
+            imageUrl = decodeHtmlEntities(linkMatch[1]);
+        }
+    }
+
+    // Extract text content (remove HTML tags)
+    textContent = html
+        .replace(/<a[^>]*>.*?<\/a>/gi, '') // Remove link elements (often just the image link)
+        .replace(/<[^>]*>/g, '') // Remove remaining HTML tags
+        .trim();
+
     // Decode HTML entities
-    cleaned = cleaned
+    textContent = decodeHtmlEntities(textContent);
+
+    // Remove "[link]" and "[comments]" text
+    textContent = textContent
+        .replace(/\[link\]/gi, '')
+        .replace(/\[comments\]/gi, '')
+        .trim();
+
+    // Truncate to 300 characters
+    if (textContent.length > 300) {
+        textContent = textContent.substring(0, 297) + '...';
+    }
+
+    return { imageUrl, textContent };
+}
+
+/**
+ * Decode HTML entities
+ * @param {string} text - Text with HTML entities
+ * @returns {string} Decoded text
+ */
+function decodeHtmlEntities(text) {
+    if (!text) return '';
+    return text
         .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'");
-    
-    // Truncate to 300 characters
-    if (cleaned.length > 300) {
-        cleaned = cleaned.substring(0, 297) + '...';
-    }
-    
-    return cleaned;
+        .replace(/&#39;/g, "'")
+        .replace(/&nbsp;/g, ' ');
 }
 
 export { initRedditFeed };
