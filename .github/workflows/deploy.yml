@@ -1,6 +1,7 @@
 name: Deploy to Docker Hub
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -11,6 +12,7 @@ on:
       - 'package-lock.json'
       - 'Dockerfile'
       - '.dockerignore'
+      - 'redditRssFeed.js'
 
 jobs:
   build-and-deploy:
