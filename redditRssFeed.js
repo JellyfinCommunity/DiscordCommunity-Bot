@@ -70,49 +70,33 @@ async function postItem(channel, item) {
     // Extract flair from categories if available
     const flair = item.categories && item.categories.length > 0 ? item.categories[0] : null;
 
-    // Build description with image URL link if present
-    let description = '';
-    if (imageUrl) {
-        description += `${imageUrl}\n\n`;
-    }
-    if (textContent) {
-        description += textContent;
-    }
+    // Clean up author name
+    const authorName = (item.author || 'Unknown').replace(/^\/?u\//, '');
+
+    // Build title with flair prefix if available
+    const title = flair ? `[${flair}] ${item.title}` : item.title;
 
     // Create Discord embed message
     const embed = {
-        color: 0xFF5700, // Reddit/Jellyfin orange color
-        title: item.title,
+        color: 0xFF5700, // Reddit orange
+        title: title,
         url: item.link,
         author: {
-            name: `u/${(item.author || 'Unknown').replace(/^\/?u\//, '')}`,
-            url: `https://www.reddit.com/user/${(item.author || 'Unknown').replace(/^\/?u\//, '')}`,
+            name: `u/${authorName}`,
+            url: `https://www.reddit.com/user/${authorName}`,
+            icon_url: 'https://www.redditstatic.com/avatars/defaults/v2/avatar_default_1.png',
         },
-        description: description || undefined,
-        fields: [],
+        description: textContent || undefined,
         timestamp: new Date(item.pubDate),
         footer: {
             text: 'r/JellyfinCommunity',
+            icon_url: 'https://styles.redditmedia.com/t5_3fh7f/styles/communityIcon_1f4bk8bxuqz41.png',
         },
     };
 
-    // Add flair field if available
-    if (flair) {
-        embed.fields.push({
-            name: 'Flair',
-            value: flair,
-            inline: false,
-        });
-    }
-
-    // Remove empty fields array if no fields
-    if (embed.fields.length === 0) {
-        delete embed.fields;
-    }
-
-    // Add thumbnail if we found an image
+    // Add image if found (use large image, not thumbnail)
     if (imageUrl) {
-        embed.thumbnail = { url: imageUrl };
+        embed.image = { url: imageUrl };
     }
 
     // Send to Discord
