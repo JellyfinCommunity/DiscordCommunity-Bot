@@ -1,6 +1,10 @@
 // Import RSS Parser
 import Parser from 'rss-parser';
-const parser = new Parser();
+const parser = new Parser({
+    headers: {
+        'User-Agent': 'JellyfinCommunityBot/1.0 (Discord bot for r/JellyfinCommunity)'
+    }
+});
 
 // Configuration
 const REDDIT_RSS_URL = 'https://www.reddit.com/r/JellyfinCommunity/new/.rss';
