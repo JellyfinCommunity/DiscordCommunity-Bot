@@ -7,7 +7,7 @@ const parser = new Parser({
 });
 
 // Configuration
-const REDDIT_RSS_URL = 'https://www.reddit.com/r/JellyfinCommunity/new/.rss';
+const REDDIT_RSS_URL = 'https://old.reddit.com/r/JellyfinCommunity/new/.rss';
 const CHECK_INTERVAL = 5 * 60 * 1000; // Check every 5 minutes (in milliseconds)
 
 // Store to track already posted items (to avoid duplicates)
