@@ -2,7 +2,7 @@
 import Parser from 'rss-parser';
 const parser = new Parser({
     headers: {
-        'User-Agent': 'JellyfinCommunityBot/1.0 (Discord bot for r/JellyfinCommunity)'
+        'User-Agent': 'Tiny Tiny RSS/21.12 (https://tt-rss.org/)'
     }
 });
 
