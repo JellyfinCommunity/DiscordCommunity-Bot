@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://discord.gg/wH6Z75Yaeb">
-    <img alt="JellyfinCommunity" src="https://img.shields.io/badge/Discord-Streamyfin-blue?style=flat-square&logo=discord">
+    <img alt="JellyfinCommunity" src="https://img.shields.io/badge/Discord-JellyfinCommunity-blue?style=flat-square&logo=discord">
       <a href="https://www.reddit.com/r/JellyfinCommunity/">
     <img alt="JellyfinCommunity" src="https://img.shields.io/badge/Reddit-JellyfinCommunity-orange?style=flat-square&logo=reddit">
   </a>
