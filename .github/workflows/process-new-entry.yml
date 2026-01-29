@@ -10,19 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
       issues: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.PAT_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
 
       - name: Parse issue and update data.json
         id: parse
@@ -110,33 +102,27 @@ jobs:
 
             console.log(`Successfully prepared entry: ${name} (${id}) in ${category}`);
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.PAT_TOKEN }}
-          commit-message: "feat: add ${{ steps.parse.outputs.name }} to ${{ steps.parse.outputs.category }}"
-          title: "feat: add ${{ steps.parse.outputs.name }} to ${{ steps.parse.outputs.category }}"
-          body: |
-            This PR was automatically generated from issue #${{ steps.parse.outputs.issue_number }}.
-
-            ## New Entry
-            - **Name:** ${{ steps.parse.outputs.name }}
-            - **Category:** ${{ steps.parse.outputs.category }}
-            - **ID:** ${{ steps.parse.outputs.id }}
-
-            Closes #${{ steps.parse.outputs.issue_number }}
-          branch: new-entry/${{ steps.parse.outputs.id }}
-          delete-branch: true
-          labels: automated-pr
+      - name: Create branch and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b new-entry/${{ steps.parse.outputs.id }}
+          git add data.json
+          git commit -m "feat: add ${{ steps.parse.outputs.name }} to ${{ steps.parse.outputs.category }}"
+          git push origin new-entry/${{ steps.parse.outputs.id }}
 
       - name: Comment on issue
         uses: actions/github-script@v7
         with:
           script: |
             const issueNumber = context.payload.issue.number;
+            const branchName = 'new-entry/${{ steps.parse.outputs.id }}';
+            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            const prUrl = `${repoUrl}/compare/main...${branchName}?expand=1`;
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: `✅ Thanks for your submission! A PR has been automatically created to add **${{ steps.parse.outputs.name }}** to the list.\n\nA maintainer will review and merge it shortly.`
+              body: `Branch \`${branchName}\` wurde erstellt mit **${{ steps.parse.outputs.name }}**.\n\n[Klicke hier um den PR zu erstellen](${prUrl})\n\nEin Maintainer wird den PR dann reviewen und mergen.`
             });
