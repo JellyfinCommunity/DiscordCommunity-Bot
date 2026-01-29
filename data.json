@@ -61,6 +61,20 @@
         "url": "https://github.com/ranaldsgift/KefinTweaks/releases/tag/v0.4.5",
         "published_at": "2025-12-10T23:15:47Z"
       }
+    },
+    {
+      "id": "jellyfin-collection-import",
+      "name": "Jellyfin Collection Import",
+      "description": "test",
+      "repo": "https://github.com/lostb1t/jellyfin-plugin-collection-import",
+      "developers": [
+        {
+          "name": "lostb1t",
+          "github": "https://github.com/lostb1t"
+        }
+      ],
+      "lastChecked": "2026-01-29T14:35:53.674Z",
+      "lastRelease": null
     }
   ],
   "services": [
