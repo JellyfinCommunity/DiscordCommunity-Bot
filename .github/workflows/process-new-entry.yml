@@ -1,0 +1,140 @@
+name: Process New Entry Request
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  process-entry:
+    if: github.event.label.name == 'new-entry'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Parse issue and update data.json
+        id: parse
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            const issueBody = context.payload.issue.body;
+            const issueNumber = context.payload.issue.number;
+            const issueTitle = context.payload.issue.title;
+
+            // Parse issue form fields
+            function parseField(body, fieldName) {
+              const regex = new RegExp(`### ${fieldName}\\s*\\n\\s*([^\\n#]+)`, 'i');
+              const match = body.match(regex);
+              return match ? match[1].trim() : null;
+            }
+
+            const category = parseField(issueBody, 'Category');
+            const name = parseField(issueBody, 'Project Name');
+            const description = parseField(issueBody, 'Description');
+            const repo = parseField(issueBody, 'GitHub Repository URL');
+            const developerName = parseField(issueBody, 'Developer Name');
+            const developerGithub = parseField(issueBody, 'Developer GitHub Profile');
+            const discordUsername = parseField(issueBody, 'Discord Username');
+            const discordChannel = parseField(issueBody, 'Discord Channel ID');
+
+            // Validate required fields
+            if (!category || !name || !description || !repo || !developerName || !developerGithub) {
+              core.setFailed('Missing required fields in issue');
+              return;
+            }
+
+            // Validate category
+            const validCategories = ['third_party_clients', 'plugins', 'services'];
+            if (!validCategories.includes(category)) {
+              core.setFailed(`Invalid category: ${category}`);
+              return;
+            }
+
+            // Generate ID from name
+            const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+            // Read current data.json
+            const data = JSON.parse(fs.readFileSync('data.json', 'utf8'));
+
+            // Check if ID already exists
+            const allEntries = [...data.third_party_clients, ...data.plugins, ...data.services];
+            if (allEntries.some(entry => entry.id === id)) {
+              core.setFailed(`Entry with ID "${id}" already exists`);
+              return;
+            }
+
+            // Create new entry
+            const newEntry = {
+              id,
+              name,
+              description,
+              repo,
+              developers: [
+                {
+                  name: developerName,
+                  [category === 'third_party_clients' ? 'link' : 'github']: developerGithub,
+                  ...(discordUsername && discordUsername !== '_No response_' ? { discord_username: discordUsername } : {}),
+                  ...(discordChannel && discordChannel !== '_No response_' ? { discord_channel: discordChannel } : {})
+                }
+              ],
+              ...(category === 'services' ? { statusUrl: null } : {}),
+              lastChecked: new Date().toISOString(),
+              lastRelease: null
+            };
+
+            // Add to appropriate category
+            data[category].push(newEntry);
+
+            // Write updated data.json
+            fs.writeFileSync('data.json', JSON.stringify(data, null, 2) + '\n');
+
+            // Set outputs
+            core.setOutput('category', category);
+            core.setOutput('name', name);
+            core.setOutput('id', id);
+            core.setOutput('issue_number', issueNumber);
+
+            console.log(`Successfully prepared entry: ${name} (${id}) in ${category}`);
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "feat: add ${{ steps.parse.outputs.name }} to ${{ steps.parse.outputs.category }}"
+          title: "feat: add ${{ steps.parse.outputs.name }} to ${{ steps.parse.outputs.category }}"
+          body: |
+            This PR was automatically generated from issue #${{ steps.parse.outputs.issue_number }}.
+
+            ## New Entry
+            - **Name:** ${{ steps.parse.outputs.name }}
+            - **Category:** ${{ steps.parse.outputs.category }}
+            - **ID:** ${{ steps.parse.outputs.id }}
+
+            Closes #${{ steps.parse.outputs.issue_number }}
+          branch: new-entry/${{ steps.parse.outputs.id }}
+          delete-branch: true
+          labels: automated-pr
+
+      - name: Comment on issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = context.payload.issue.number;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: `✅ Thanks for your submission! A PR has been automatically created to add **${{ steps.parse.outputs.name }}** to the list.\n\nA maintainer will review and merge it shortly.`
+            });

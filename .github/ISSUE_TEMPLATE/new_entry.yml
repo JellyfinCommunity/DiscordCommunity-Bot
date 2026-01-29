@@ -1,0 +1,95 @@
+name: "➕ New Entry Request"
+description: "Request to add a new client, plugin, or service to the list"
+title: "[New Entry]: "
+labels: ["new-entry"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for submitting a new entry! Please fill out all required fields below.
+        A maintainer will review your submission and it will be automatically added via PR.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: What type of project is this?
+      options:
+        - third_party_clients
+        - plugins
+        - services
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: Project Name
+      description: The display name of the project
+      placeholder: "e.g., My Awesome Client"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A short description of what this project does
+      placeholder: "e.g., Native Android client with Material Design"
+    validations:
+      required: true
+
+  - type: input
+    id: repo
+    attributes:
+      label: GitHub Repository URL
+      description: Full URL to the GitHub repository
+      placeholder: "https://github.com/username/repo"
+    validations:
+      required: true
+
+  - type: input
+    id: developer_name
+    attributes:
+      label: Developer Name
+      description: Your name or username
+      placeholder: "e.g., JohnDoe"
+    validations:
+      required: true
+
+  - type: input
+    id: developer_github
+    attributes:
+      label: Developer GitHub Profile
+      description: Full URL to your GitHub profile
+      placeholder: "https://github.com/username"
+    validations:
+      required: true
+
+  - type: input
+    id: discord_username
+    attributes:
+      label: Discord Username
+      description: Your Discord username (without @)
+      placeholder: "e.g., johndoe"
+    validations:
+      required: false
+
+  - type: input
+    id: discord_channel
+    attributes:
+      label: Discord Channel ID
+      description: The ID of your project's Discord channel (if applicable)
+      placeholder: "e.g., 1234567890123456789"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      options:
+        - label: I confirm this project is related to Jellyfin and is open source
+          required: true
+        - label: I am the developer or have permission to submit this project
+          required: true
