@@ -21,6 +21,6 @@ export default {
 			})
 			.setFooter({ text: "Get help with installation, configuration, and usage" });
 
-		await interaction.reply({ embeds: [embed] });
+		await interaction.editReply({ embeds: [embed] });
 	},
 };

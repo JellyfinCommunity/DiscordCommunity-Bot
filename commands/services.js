@@ -18,7 +18,7 @@ export default {
             const services = jsonData.services || [];
 
             if (services.length === 0) {
-                await interaction.reply({
+                await interaction.editReply({
                     content: "❌ No services available.",
                     flags: MessageFlags.Ephemeral
                 });
@@ -55,7 +55,7 @@ export default {
                 .setDescription("⭐ = Community developers on this server\n\nSelect a service from the dropdown menu below to view detailed information.")
                 .setFooter({ text: `${services.length} services available` });
 
-            const response = await interaction.reply({
+            const response = await interaction.editReply({
                 embeds: [embed],
                 components: [row]
             });
@@ -97,7 +97,7 @@ export default {
 
         } catch (error) {
             console.error('Error executing services command:', error);
-            await interaction.reply({
+            await interaction.editReply({
                 content: "❌ An error occurred while fetching service information.",
                 flags: MessageFlags.Ephemeral
             });

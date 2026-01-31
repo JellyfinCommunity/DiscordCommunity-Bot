@@ -68,6 +68,9 @@ client.once('ready', async () => {
 // Handle slash commands and autocomplete
 client.on('interactionCreate', async interaction => {
   if (interaction.isCommand()) {
+    // Defer reply immediately to prevent timeout
+    await interaction.deferReply();
+
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
@@ -75,7 +78,8 @@ client.on('interactionCreate', async interaction => {
       await command.execute(interaction);
     } catch (error) {
       console.error(error);
-      await interaction.reply({ content: 'There was an error executing that command.', flags: MessageFlags.Ephemeral });
+      // Use editReply since we deferred
+      await interaction.editReply({ content: 'There was an error executing that command.', flags: MessageFlags.Ephemeral });
     }
   } else if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);

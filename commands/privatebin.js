@@ -21,6 +21,6 @@ export default {
             })
             .setFooter({ text: "Encrypted, zero-knowledge paste service" });
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     },
 };

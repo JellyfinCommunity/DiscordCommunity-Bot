@@ -16,6 +16,6 @@ export default {
 			})
 			.setFooter({ text: "Note: Occasional false triggers may occur. Disregard accordingly." });
 
-		await interaction.reply({ embeds: [embed] });
+		await interaction.editReply({ embeds: [embed] });
 	},
 };

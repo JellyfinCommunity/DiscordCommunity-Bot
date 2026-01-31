@@ -21,6 +21,6 @@ export default {
 			})
 			.setFooter({ text: "Community curated resource list" });
 
-		await interaction.reply({ embeds: [embed] });
+		await interaction.editReply({ embeds: [embed] });
 	},
 };

@@ -18,7 +18,7 @@ export default {
             const clients = jsonData.third_party_clients || [];
 
             if (clients.length === 0) {
-                await interaction.reply({
+                await interaction.editReply({
                     content: "❌ No third-party clients available.",
                     flags: MessageFlags.Ephemeral
                 });
@@ -55,7 +55,7 @@ export default {
                 .setDescription("⭐ = Community developers on this server\n\nSelect a client from the dropdown menu below to view detailed information.")
                 .setFooter({ text: `${clients.length} third-party clients available` });
 
-            const response = await interaction.reply({
+            const response = await interaction.editReply({
                 embeds: [embed],
                 components: [row]
             });
@@ -97,7 +97,7 @@ export default {
 
         } catch (error) {
             console.error('Error executing clients command:', error);
-            await interaction.reply({
+            await interaction.editReply({
                 content: "❌ An error occurred while fetching client information.",
                 flags: MessageFlags.Ephemeral
             });

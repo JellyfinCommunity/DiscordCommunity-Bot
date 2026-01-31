@@ -17,7 +17,7 @@ export default {
             const jsonData = JSON.parse(data);
 
             if (!jsonData.plugins || jsonData.plugins.length === 0) {
-                await interaction.reply({
+                await interaction.editReply({
                     content: "❌ No plugins available.",
                     flags: MessageFlags.Ephemeral
                 });
@@ -54,7 +54,7 @@ export default {
                 .setDescription("⭐ = Community developers on this server\n\nSelect a plugin from the dropdown menu below to view detailed information.")
                 .setFooter({ text: `${jsonData.plugins.length} plugins available` });
 
-            const response = await interaction.reply({
+            const response = await interaction.editReply({
                 embeds: [embed],
                 components: [row]
             });
@@ -96,7 +96,7 @@ export default {
 
         } catch (error) {
             console.error('Error executing plugins command:', error);
-            await interaction.reply({
+            await interaction.editReply({
                 content: "❌ An error occurred while fetching plugin information.",
                 flags: MessageFlags.Ephemeral
             });
