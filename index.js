@@ -82,22 +82,16 @@ client.on('interactionCreate', async interaction => {
         await command.execute(interaction);
       } catch (error) {
         console.error(error);
-        // Use editReply since we deferred
-        if (interaction.deferred || interaction.replied) {
-          await interaction.editReply({ content: 'There was an error executing that command.' });
-        } else {
-          await interaction.reply({ content: 'There was an error executing that command.' });
-        }
+        // Use editReply since we successfully deferred
+        await interaction.editReply({ content: 'There was an error executing that command.' });
       }
     } catch (error) {
       console.error('Failed to defer interaction:', error);
-      // If defer failed and we can still reply, send error
-      if (!interaction.replied && !interaction.deferred) {
-        try {
-          await interaction.reply({ content: 'There was an error processing your command.' });
-        } catch (replyError) {
-          console.error('Failed to send error reply:', replyError);
-        }
+      // If defer failed, try to send a regular reply
+      try {
+        await interaction.reply({ content: 'There was an error processing your command.' });
+      } catch (replyError) {
+        console.error('Failed to send error reply:', replyError);
       }
     }
   } else if (interaction.isAutocomplete()) {
