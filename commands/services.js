@@ -19,8 +19,7 @@ export default {
 
             if (services.length === 0) {
                 await interaction.editReply({
-                    content: "❌ No services available.",
-                    flags: MessageFlags.Ephemeral
+                    content: "❌ No services available."
                 });
                 return;
             }
@@ -98,8 +97,7 @@ export default {
         } catch (error) {
             console.error('Error executing services command:', error);
             await interaction.editReply({
-                content: "❌ An error occurred while fetching service information.",
-                flags: MessageFlags.Ephemeral
+                content: "❌ An error occurred while fetching service information."
             });
         }
     }

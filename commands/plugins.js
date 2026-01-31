@@ -18,8 +18,7 @@ export default {
 
             if (!jsonData.plugins || jsonData.plugins.length === 0) {
                 await interaction.editReply({
-                    content: "❌ No plugins available.",
-                    flags: MessageFlags.Ephemeral
+                    content: "❌ No plugins available."
                 });
                 return;
             }
@@ -97,8 +96,7 @@ export default {
         } catch (error) {
             console.error('Error executing plugins command:', error);
             await interaction.editReply({
-                content: "❌ An error occurred while fetching plugin information.",
-                flags: MessageFlags.Ephemeral
+                content: "❌ An error occurred while fetching plugin information."
             });
         }
     }

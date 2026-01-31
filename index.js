@@ -72,14 +72,17 @@ client.on('interactionCreate', async interaction => {
     await interaction.deferReply();
 
     const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+    if (!command) {
+      await interaction.editReply({ content: 'Command not found.' });
+      return;
+    }
 
     try {
       await command.execute(interaction);
     } catch (error) {
       console.error(error);
       // Use editReply since we deferred
-      await interaction.editReply({ content: 'There was an error executing that command.', flags: MessageFlags.Ephemeral });
+      await interaction.editReply({ content: 'There was an error executing that command.' });
     }
   } else if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);

@@ -19,8 +19,7 @@ export default {
 
             if (clients.length === 0) {
                 await interaction.editReply({
-                    content: "❌ No third-party clients available.",
-                    flags: MessageFlags.Ephemeral
+                    content: "❌ No third-party clients available."
                 });
                 return;
             }
@@ -98,8 +97,7 @@ export default {
         } catch (error) {
             console.error('Error executing clients command:', error);
             await interaction.editReply({
-                content: "❌ An error occurred while fetching client information.",
-                flags: MessageFlags.Ephemeral
+                content: "❌ An error occurred while fetching client information."
             });
         }
     }

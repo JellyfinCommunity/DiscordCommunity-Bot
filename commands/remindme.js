@@ -83,16 +83,14 @@ export default {
             if (!channel.permissionsFor(channel.guild.members.me).has('ViewChannel') || 
                 !channel.permissionsFor(channel.guild.members.me).has('SendMessages')) {
                 return await interaction.editReply({
-                    content: '❌ I cannot send messages in this channel. Please check my permissions.',
-                    flags: MessageFlags.Ephemeral
+                    content: '❌ I cannot send messages in this channel. Please check my permissions.'
                 });
             }
 
             // Check time limits
             if (timeAmount > TIME_LIMITS[timeUnit]) {
                 return await interaction.editReply({
-                    content: `❌ You cannot set a reminder for more than ${TIME_LIMITS[timeUnit]} ${timeUnit}!`,
-                    flags: MessageFlags.Ephemeral
+                    content: `❌ You cannot set a reminder for more than ${TIME_LIMITS[timeUnit]} ${timeUnit}!`
                 });
             }
 
@@ -122,8 +120,7 @@ export default {
 
             const timeString = `${timeAmount} ${timeUnit}`;
             await interaction.editReply({
-                content: `✅ I will remind you about "${text}" in ${timeString}`,
-                flags: MessageFlags.Ephemeral
+                content: `✅ I will remind you about "${text}" in ${timeString}`
             });
 
             // Set timeout for reminder
@@ -143,8 +140,7 @@ export default {
         } catch (error) {
             console.error('Error setting reminder:', error);
             await interaction.editReply({
-                content: '❌ An error occurred while setting the reminder.',
-                flags: MessageFlags.Ephemeral
+                content: '❌ An error occurred while setting the reminder.'
             });
         }
     }
