@@ -10,6 +10,25 @@ const parser = new Parser({
 const REDDIT_RSS_URL = 'https://old.reddit.com/r/JellyfinCommunity/new/.rss';
 const CHECK_INTERVAL = 15 * 60 * 1000; // Check every 15 minutes (in milliseconds)
 
+/**
+ * Fetch RSS feed with retry logic and exponential backoff
+ * @param {string} url - RSS feed URL
+ * @param {number} maxRetries - Maximum number of retry attempts
+ * @returns {Promise<Object>} Parsed RSS feed
+ */
+async function fetchWithRetry(url, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await parser.parseURL(url);
+        } catch (error) {
+            if (attempt === maxRetries) throw error;
+            const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+            console.log(`RSS fetch failed (attempt ${attempt}/${maxRetries}), retrying in ${delay/1000}s...`);
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+}
+
 // Store to track already posted items (to avoid duplicates)
 let postedItems = new Set();
 
@@ -30,7 +49,7 @@ async function initRedditFeed(client, channelId) {
 
     // Initial load - post the latest item to verify functionality, mark others as already posted
     try {
-        const feed = await parser.parseURL(REDDIT_RSS_URL);
+        const feed = await fetchWithRetry(REDDIT_RSS_URL);
 
         if (feed.items.length > 0) {
             // The first item is the newest post
@@ -113,7 +132,7 @@ async function postItem(channel, item) {
  */
 async function checkForNewPosts(channel) {
     try {
-        const feed = await parser.parseURL(REDDIT_RSS_URL);
+        const feed = await fetchWithRetry(REDDIT_RSS_URL);
 
         // Process items in reverse order (oldest first) to maintain chronological order
         const newItems = feed.items
