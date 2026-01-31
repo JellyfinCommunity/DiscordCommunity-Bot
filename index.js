@@ -74,6 +74,7 @@ client.on('interactionCreate', async interaction => {
 
       const command = client.commands.get(interaction.commandName);
       if (!command) {
+        console.error(`Command not found: ${interaction.commandName} (requested by ${interaction.user.tag})`);
         await interaction.editReply({ content: 'Command not found.' });
         return;
       }
@@ -81,7 +82,7 @@ client.on('interactionCreate', async interaction => {
       try {
         await command.execute(interaction);
       } catch (error) {
-        console.error(error);
+        console.error(`Error executing command ${interaction.commandName} for user ${interaction.user.tag}:`, error);
         // Use editReply since we successfully deferred
         await interaction.editReply({ content: 'There was an error executing that command.' });
       }
