@@ -1,8 +1,10 @@
 // Import RSS Parser
 import Parser from 'rss-parser';
 const parser = new Parser({
+    timeout: 20000, // 20 second timeout (faster retries)
     headers: {
-        'User-Agent': 'Tiny Tiny RSS/21.12 (https://tt-rss.org/)'
+        'User-Agent': 'Mozilla/5.0 (compatible; JellyfinCommunityBot/1.0; +https://github.com/JellyfinCommunity)',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*'
     }
 });
 
