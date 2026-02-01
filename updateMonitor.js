@@ -1,11 +1,60 @@
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import { EmbedBuilder } from 'discord.js';
 import { COLORS } from './config.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = path.join(process.cwd(), 'data.json');
+const POSTED_ITEMS_FILE = path.join(__dirname, 'postedItems.json');
+const MAX_STORED_UPDATES = 10;
 const UPDATE_CHANNEL_ID = process.env.UPDATE_CHANNEL_ID;
+
+/**
+ * Load full posted items data from JSON file
+ */
+function loadPostedItemsFile() {
+    try {
+        if (fsSync.existsSync(POSTED_ITEMS_FILE)) {
+            return JSON.parse(fsSync.readFileSync(POSTED_ITEMS_FILE, 'utf8'));
+        }
+    } catch (error) {
+        console.error('Error loading posted items file:', error);
+    }
+    return { redditPosts: [], updatePosts: [] };
+}
+
+/**
+ * Save full posted items data to JSON file
+ */
+function savePostedItemsFile(data) {
+    try {
+        fsSync.writeFileSync(POSTED_ITEMS_FILE, JSON.stringify(data, null, 2));
+    } catch (error) {
+        console.error('Error saving posted items file:', error);
+    }
+}
+
+/**
+ * Check if an update has already been posted
+ */
+function isUpdatePosted(releaseKey) {
+    const data = loadPostedItemsFile();
+    return (data.updatePosts || []).includes(releaseKey);
+}
+
+/**
+ * Mark an update as posted
+ */
+function markUpdatePosted(releaseKey) {
+    const data = loadPostedItemsFile();
+    const updates = data.updatePosts || [];
+    updates.push(releaseKey);
+    data.updatePosts = updates.slice(-MAX_STORED_UPDATES);
+    savePostedItemsFile(data);
+}
 
 export async function initializeUpdateMonitor(client) {
     console.log('🔄 Initializing update monitor...');
@@ -46,21 +95,39 @@ async function checkForUpdates(client) {
                     
                     const latestRelease = await fetchLatestRelease(item.repo);
                     
-                    if (latestRelease && (!item.lastRelease || 
+                    if (latestRelease && (!item.lastRelease ||
                         latestRelease.tag_name !== item.lastRelease.tag)) {
-                        
+
+                        // Create unique key for this release
+                        const releaseKey = `${item.name}:${latestRelease.tag_name}`;
+
+                        // Check if already posted (duplicate prevention on restart)
+                        if (isUpdatePosted(releaseKey)) {
+                            console.log(`⏭️ Skipping already posted release: ${releaseKey}`);
+                            item.lastRelease = {
+                                tag: latestRelease.tag_name,
+                                url: latestRelease.html_url,
+                                published_at: latestRelease.published_at
+                            };
+                            hasUpdates = true;
+                            continue;
+                        }
+
                         // New release detected
                         console.log(`🆕 New release for ${item.name}: ${latestRelease.tag_name}`);
-                        
+
                         // Update item data
                         item.lastRelease = {
                             tag: latestRelease.tag_name,
                             url: latestRelease.html_url,
                             published_at: latestRelease.published_at
                         };
-                        
+
                         // Send notification
                         await sendUpdateNotification(client, item, latestRelease, category);
+
+                        // Mark as posted
+                        markUpdatePosted(releaseKey);
                         hasUpdates = true;
                     }
 

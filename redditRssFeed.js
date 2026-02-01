@@ -1,5 +1,9 @@
 // Import RSS Parser
 import Parser from 'rss-parser';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 const parser = new Parser({
     timeout: 20000, // 20 second timeout (faster retries)
     headers: {
@@ -11,6 +15,9 @@ const parser = new Parser({
 // Configuration
 const REDDIT_RSS_URL = 'https://old.reddit.com/r/JellyfinCommunity/new/.rss';
 const CHECK_INTERVAL = 15 * 60 * 1000; // Check every 15 minutes (in milliseconds)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const POSTED_ITEMS_FILE = path.join(__dirname, 'postedItems.json');
+const MAX_STORED_ITEMS = 10;
 
 /**
  * Fetch RSS feed with retry logic and exponential backoff
@@ -35,13 +42,70 @@ async function fetchWithRetry(url, maxRetries = 3) {
 let postedItems = new Set();
 
 /**
+ * Load full posted items data from JSON file
+ */
+function loadPostedItemsFile() {
+    try {
+        if (fs.existsSync(POSTED_ITEMS_FILE)) {
+            return JSON.parse(fs.readFileSync(POSTED_ITEMS_FILE, 'utf8'));
+        }
+    } catch (error) {
+        console.error('Error loading posted items file:', error);
+    }
+    return { redditPosts: [], updatePosts: [] };
+}
+
+/**
+ * Save full posted items data to JSON file
+ */
+function savePostedItemsFile(data) {
+    try {
+        fs.writeFileSync(POSTED_ITEMS_FILE, JSON.stringify(data, null, 2));
+    } catch (error) {
+        console.error('Error saving posted items file:', error);
+    }
+}
+
+/**
+ * Load Reddit posted items from JSON file
+ */
+function loadPostedItems() {
+    try {
+        const data = loadPostedItemsFile();
+        postedItems = new Set(data.redditPosts || []);
+        console.log(`Loaded ${postedItems.size} previously posted Reddit items from file`);
+    } catch (error) {
+        console.error('Error loading posted items:', error);
+        postedItems = new Set();
+    }
+}
+
+/**
+ * Save Reddit posted items to JSON file (keeps only the last MAX_STORED_ITEMS)
+ */
+function savePostedItems() {
+    try {
+        const data = loadPostedItemsFile();
+        const itemsArray = Array.from(postedItems).slice(-MAX_STORED_ITEMS);
+        postedItems = new Set(itemsArray);
+        data.redditPosts = itemsArray;
+        savePostedItemsFile(data);
+    } catch (error) {
+        console.error('Error saving posted items:', error);
+    }
+}
+
+/**
  * Initialize the Reddit RSS feed monitor
  * @param {Client} client - Discord.js client instance
  * @param {string} channelId - Discord channel ID where posts should be sent
  */
 async function initRedditFeed(client, channelId) {
     console.log('Starting Reddit RSS feed monitor...');
-    
+
+    // Load previously posted items from file
+    loadPostedItems();
+
     // Get the target Discord channel
     const channel = await client.channels.fetch(channelId);
     if (!channel) {
@@ -49,27 +113,20 @@ async function initRedditFeed(client, channelId) {
         return;
     }
 
-    // Initial load - post the latest item to verify functionality, mark others as already posted
+    // Initial load - if no saved items, mark current feed as already posted to avoid spam
     try {
         const feed = await fetchWithRetry(REDDIT_RSS_URL);
 
-        if (feed.items.length > 0) {
-            // The first item is the newest post
-            const latestPost = feed.items[0];
-
-            // Mark all OTHER posts as already posted (skip the first one)
-            feed.items.slice(1).forEach(item => {
+        if (postedItems.size === 0 && feed.items.length > 0) {
+            // First run: mark all current posts as already posted
+            feed.items.forEach(item => {
                 postedItems.add(item.link);
             });
-            console.log(`Loaded ${postedItems.size} existing Reddit posts (won't be reposted)`);
-
-            // Post the latest one to verify functionality
-            console.log('Posting latest Reddit post to verify functionality...');
-            await postItem(channel, latestPost);
-            postedItems.add(latestPost.link);
-            console.log('Verification post sent successfully!');
+            savePostedItems();
+            console.log(`First run: marked ${postedItems.size} existing posts as already posted`);
         } else {
-            console.log('No Reddit posts found in feed');
+            // Check for any new posts immediately
+            await checkForNewPosts(channel);
         }
     } catch (error) {
         console.error('Error during initial RSS feed load:', error);
@@ -153,6 +210,11 @@ async function checkForNewPosts(channel) {
 
             // Small delay to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        // Save to file if we posted anything
+        if (newItems.length > 0) {
+            savePostedItems();
         }
     } catch (error) {
         console.error('Error checking RSS feed:', error);
