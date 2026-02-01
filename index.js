@@ -74,8 +74,18 @@ client.on('interactionCreate', async interaction => {
     try {
       await command.execute(interaction);
     } catch (error) {
-      console.error(error);
-      await interaction.reply({ content: 'There was an error executing that command.', flags: MessageFlags.Ephemeral });
+      console.error(`Error executing command ${interaction.commandName}:`, error);
+      // Try to respond - handle both deferred and non-deferred states
+      const errorMessage = { content: 'There was an error executing that command.', flags: MessageFlags.Ephemeral };
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply(errorMessage);
+        } else {
+          await interaction.reply(errorMessage);
+        }
+      } catch (replyError) {
+        console.error('Failed to send error reply:', replyError);
+      }
     }
   } else if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);

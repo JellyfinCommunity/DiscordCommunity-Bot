@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -72,6 +72,9 @@ export default {
                     { name: 'Weeks', value: 'weeks' }
                 )),
     async execute(interaction) {
+        // Defer with ephemeral since all responses should be private
+        await interaction.deferReply({ ephemeral: true });
+
         try {
             const timeAmount = interaction.options.getInteger('time');
             const timeUnit = interaction.options.getString('unit');
@@ -82,17 +85,15 @@ export default {
             // Check bot permissions
             if (!channel.permissionsFor(channel.guild.members.me).has('ViewChannel') || 
                 !channel.permissionsFor(channel.guild.members.me).has('SendMessages')) {
-                return await interaction.reply({
-                    content: '❌ I cannot send messages in this channel. Please check my permissions.',
-                    flags: MessageFlags.Ephemeral
+                return await interaction.editReply({
+                    content: '❌ I cannot send messages in this channel. Please check my permissions.'
                 });
             }
 
             // Check time limits
             if (timeAmount > TIME_LIMITS[timeUnit]) {
-                return await interaction.reply({
-                    content: `❌ You cannot set a reminder for more than ${TIME_LIMITS[timeUnit]} ${timeUnit}!`,
-                    flags: MessageFlags.Ephemeral
+                return await interaction.editReply({
+                    content: `❌ You cannot set a reminder for more than ${TIME_LIMITS[timeUnit]} ${timeUnit}!`
                 });
             }
 
@@ -121,9 +122,8 @@ export default {
             await addReminder(reminder);
 
             const timeString = `${timeAmount} ${timeUnit}`;
-            await interaction.reply({
-                content: `✅ I will remind you about "${text}" in ${timeString}`,
-                flags: MessageFlags.Ephemeral
+            await interaction.editReply({
+                content: `✅ I will remind you about "${text}" in ${timeString}`
             });
 
             // Set timeout for reminder
@@ -142,9 +142,8 @@ export default {
             }, ms);
         } catch (error) {
             console.error('Error setting reminder:', error);
-            await interaction.reply({
-                content: '❌ An error occurred while setting the reminder.',
-                flags: MessageFlags.Ephemeral
+            await interaction.editReply({
+                content: '❌ An error occurred while setting the reminder.'
             });
         }
     }

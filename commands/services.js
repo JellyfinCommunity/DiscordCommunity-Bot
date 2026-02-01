@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, ComponentType, MessageFlags } from "discord.js";
+import { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, ComponentType } from "discord.js";
 import fs from 'fs/promises';
 import path from 'path';
 import { COLORS, CATEGORY_INFO, isFeaturedProject, sortByFeatured } from '../config.js';
@@ -12,15 +12,17 @@ export default {
         .setDescription("Browse Jellyfin services with an interactive menu"),
 
     async execute(interaction) {
+        // Defer to prevent timeout during file I/O
+        await interaction.deferReply();
+
         try {
             const data = await fs.readFile(DATA_FILE, 'utf8');
             const jsonData = JSON.parse(data);
             const services = jsonData.services || [];
 
             if (services.length === 0) {
-                await interaction.reply({
-                    content: "❌ No services available.",
-                    flags: MessageFlags.Ephemeral
+                await interaction.editReply({
+                    content: "❌ No services available."
                 });
                 return;
             }
@@ -55,7 +57,7 @@ export default {
                 .setDescription("⭐ = Community developers on this server\n\nSelect a service from the dropdown menu below to view detailed information.")
                 .setFooter({ text: `${services.length} services available` });
 
-            const response = await interaction.reply({
+            const response = await interaction.editReply({
                 embeds: [embed],
                 components: [row]
             });
@@ -97,9 +99,8 @@ export default {
 
         } catch (error) {
             console.error('Error executing services command:', error);
-            await interaction.reply({
-                content: "❌ An error occurred while fetching service information.",
-                flags: MessageFlags.Ephemeral
+            await interaction.editReply({
+                content: "❌ An error occurred while fetching service information."
             });
         }
     }
