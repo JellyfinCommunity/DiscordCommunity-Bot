@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -72,6 +72,9 @@ export default {
                     { name: 'Weeks', value: 'weeks' }
                 )),
     async execute(interaction) {
+        // Defer with ephemeral since all responses should be private
+        await interaction.deferReply({ ephemeral: true });
+
         try {
             const timeAmount = interaction.options.getInteger('time');
             const timeUnit = interaction.options.getString('unit');

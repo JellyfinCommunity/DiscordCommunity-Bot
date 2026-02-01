@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, ComponentType, MessageFlags } from "discord.js";
+import { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, ComponentType } from "discord.js";
 import fs from 'fs/promises';
 import path from 'path';
 import { COLORS, CATEGORY_INFO, isFeaturedProject, sortByFeatured } from '../config.js';
@@ -12,6 +12,9 @@ export default {
         .setDescription("Browse third-party Jellyfin clients with an interactive menu"),
 
     async execute(interaction) {
+        // Defer to prevent timeout during file I/O
+        await interaction.deferReply();
+
         try {
             const data = await fs.readFile(DATA_FILE, 'utf8');
             const jsonData = JSON.parse(data);

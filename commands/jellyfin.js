@@ -23,6 +23,6 @@ export default {
   )
   .setFooter({ text: "Powered by the community ❤️" });
 
-        await interaction.editReply({ embeds: [embed] });
+        await interaction.reply({ embeds: [embed] });
     },
 };

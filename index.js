@@ -68,29 +68,21 @@ client.once('ready', async () => {
 // Handle slash commands and autocomplete
 client.on('interactionCreate', async interaction => {
   if (interaction.isCommand()) {
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
+
     try {
-      // Defer reply immediately to prevent timeout
-      await interaction.deferReply();
-
-      const command = client.commands.get(interaction.commandName);
-      if (!command) {
-        console.error(`Command not found: ${interaction.commandName} (requested by ${interaction.user.tag})`);
-        await interaction.editReply({ content: 'Command not found.' });
-        return;
-      }
-
-      try {
-        await command.execute(interaction);
-      } catch (error) {
-        console.error(`Error executing command ${interaction.commandName} for user ${interaction.user.tag}:`, error);
-        // Use editReply since we successfully deferred
-        await interaction.editReply({ content: 'There was an error executing that command.' });
-      }
+      await command.execute(interaction);
     } catch (error) {
-      console.error('Failed to defer interaction:', error);
-      // If defer failed, try to send a regular reply
+      console.error(`Error executing command ${interaction.commandName}:`, error);
+      // Try to respond - handle both deferred and non-deferred states
+      const errorMessage = { content: 'There was an error executing that command.', flags: MessageFlags.Ephemeral };
       try {
-        await interaction.reply({ content: 'There was an error processing your command.' });
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply(errorMessage);
+        } else {
+          await interaction.reply(errorMessage);
+        }
       } catch (replyError) {
         console.error('Failed to send error reply:', replyError);
       }

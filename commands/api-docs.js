@@ -28,6 +28,6 @@ export default {
 			)
 			.setFooter({ text: "Build integrations and tools with the Jellyfin API" });
 
-		await interaction.editReply({ embeds: [embed] });
+		await interaction.reply({ embeds: [embed] });
 	},
 };
