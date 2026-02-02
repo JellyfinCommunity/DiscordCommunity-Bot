@@ -66,8 +66,8 @@ export async function initializeUpdateMonitor(client) {
         return;
     }
 
-    // Schedule checks every 6 hours (using timerManager for graceful shutdown)
-    const job = cron.schedule('0 */6 * * *', async () => {
+    // Schedule checks every hour (using timerManager for graceful shutdown)
+    const job = cron.schedule('0 * * * *', async () => {
         log.info('Running scheduled update check');
         await checkForUpdates(client);
     });
