@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import { EmbedBuilder } from 'discord.js';
 import { COLORS } from './config.js';
+import { timerManager } from './utils/timerManager.js';
+import { updateLogger as log } from './utils/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = path.join(process.cwd(), 'data.json');
@@ -21,7 +23,7 @@ function loadPostedItemsFile() {
             return JSON.parse(fsSync.readFileSync(POSTED_ITEMS_FILE, 'utf8'));
         }
     } catch (error) {
-        console.error('Error loading posted items file:', error);
+        log.error({ err: error }, 'Error loading posted items file');
     }
     return { redditPosts: [], updatePosts: [] };
 }
@@ -33,7 +35,7 @@ function savePostedItemsFile(data) {
     try {
         fsSync.writeFileSync(POSTED_ITEMS_FILE, JSON.stringify(data, null, 2));
     } catch (error) {
-        console.error('Error saving posted items file:', error);
+        log.error({ err: error }, 'Error saving posted items file');
     }
 }
 
@@ -57,26 +59,27 @@ function markUpdatePosted(releaseKey) {
 }
 
 export async function initializeUpdateMonitor(client) {
-    console.log('🔄 Initializing update monitor...');
-    
+    log.info('Initializing update monitor');
+
     if (!UPDATE_CHANNEL_ID) {
-        console.warn('⚠️  UPDATE_CHANNEL_ID not set in environment variables. Update notifications disabled.');
+        log.warn('UPDATE_CHANNEL_ID not set - update notifications disabled');
         return;
     }
 
-    // Schedule checks every 6 hours
-    cron.schedule('0 */6 * * *', async () => {
-        console.log('🔍 Running scheduled update check...');
+    // Schedule checks every 6 hours (using timerManager for graceful shutdown)
+    const job = cron.schedule('0 */6 * * *', async () => {
+        log.info('Running scheduled update check');
         await checkForUpdates(client);
     });
+    timerManager.registerCron('update-monitor', job);
 
     // Initial check on startup (after 1 minute)
-    setTimeout(async () => {
-        console.log('🔍 Running initial update check...');
+    timerManager.setTimeout('initial-update-check', async () => {
+        log.info('Running initial update check');
         await checkForUpdates(client);
     }, 60000);
 
-    console.log('✅ Update monitor initialized');
+    log.info('Update monitor initialized');
 }
 
 async function checkForUpdates(client) {
@@ -103,7 +106,7 @@ async function checkForUpdates(client) {
 
                         // Check if already posted (duplicate prevention on restart)
                         if (isUpdatePosted(releaseKey)) {
-                            console.log(`⏭️ Skipping already posted release: ${releaseKey}`);
+                            log.debug({ releaseKey }, 'Skipping already posted release');
                             item.lastRelease = {
                                 tag: latestRelease.tag_name,
                                 url: latestRelease.html_url,
@@ -114,7 +117,7 @@ async function checkForUpdates(client) {
                         }
 
                         // New release detected
-                        console.log(`🆕 New release for ${item.name}: ${latestRelease.tag_name}`);
+                        log.info({ name: item.name, tag: latestRelease.tag_name }, 'New release detected');
 
                         // Update item data
                         item.lastRelease = {
@@ -137,7 +140,7 @@ async function checkForUpdates(client) {
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     
                 } catch (error) {
-                    console.error(`Error checking updates for ${item.name}:`, error.message);
+                    log.error({ err: error, name: item.name }, 'Error checking updates for item');
                 }
             }
         }
@@ -148,7 +151,7 @@ async function checkForUpdates(client) {
         }
 
     } catch (error) {
-        console.error('Error during update check:', error);
+        log.error({ err: error }, 'Error during update check');
     }
 }
 
@@ -186,7 +189,7 @@ async function sendUpdateNotification(client, item, release, category) {
     try {
         const channel = await client.channels.fetch(UPDATE_CHANNEL_ID);
         if (!channel) {
-            console.error('Update channel not found');
+            log.error({ channelId: UPDATE_CHANNEL_ID }, 'Update channel not found');
             return;
         }
 
@@ -237,10 +240,10 @@ async function sendUpdateNotification(client, item, release, category) {
         }
 
         await channel.send({ embeds: [embed] });
-        console.log(`📢 Sent update notification for ${item.name}`);
+        log.info({ name: item.name }, 'Sent update notification');
 
     } catch (error) {
-        console.error(`Error sending notification for ${item.name}:`, error);
+        log.error({ err: error, name: item.name }, 'Error sending notification');
     }
 }
 
@@ -257,6 +260,6 @@ function truncateText(text, maxLength) {
 
 // Manual check function for testing
 export async function manualUpdateCheck(client) {
-    console.log('🔍 Running manual update check...');
+    log.info('Running manual update check');
     await checkForUpdates(client);
 }

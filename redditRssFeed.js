@@ -3,6 +3,8 @@ import Parser from 'rss-parser';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { timerManager } from './utils/timerManager.js';
+import { redditLogger as log } from './utils/logger.js';
 
 const parser = new Parser({
     timeout: 20000, // 20 second timeout (faster retries)
@@ -32,7 +34,7 @@ async function fetchWithRetry(url, maxRetries = 3) {
         } catch (error) {
             if (attempt === maxRetries) throw error;
             const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
-            console.log(`RSS fetch failed (attempt ${attempt}/${maxRetries}), retrying in ${delay/1000}s...`);
+            log.warn({ attempt, maxRetries, delaySeconds: delay / 1000 }, 'RSS fetch failed, retrying');
             await new Promise(r => setTimeout(r, delay));
         }
     }
@@ -50,7 +52,7 @@ function loadPostedItemsFile() {
             return JSON.parse(fs.readFileSync(POSTED_ITEMS_FILE, 'utf8'));
         }
     } catch (error) {
-        console.error('Error loading posted items file:', error);
+        log.error({ err: error }, 'Error loading posted items file');
     }
     return { redditPosts: [], updatePosts: [] };
 }
@@ -62,7 +64,7 @@ function savePostedItemsFile(data) {
     try {
         fs.writeFileSync(POSTED_ITEMS_FILE, JSON.stringify(data, null, 2));
     } catch (error) {
-        console.error('Error saving posted items file:', error);
+        log.error({ err: error }, 'Error saving posted items file');
     }
 }
 
@@ -73,9 +75,9 @@ function loadPostedItems() {
     try {
         const data = loadPostedItemsFile();
         postedItems = new Set(data.redditPosts || []);
-        console.log(`Loaded ${postedItems.size} previously posted Reddit items from file`);
+        log.info({ count: postedItems.size }, 'Loaded previously posted Reddit items');
     } catch (error) {
-        console.error('Error loading posted items:', error);
+        log.error({ err: error }, 'Error loading posted items');
         postedItems = new Set();
     }
 }
@@ -91,7 +93,7 @@ function savePostedItems() {
         data.redditPosts = itemsArray;
         savePostedItemsFile(data);
     } catch (error) {
-        console.error('Error saving posted items:', error);
+        log.error({ err: error }, 'Error saving posted items');
     }
 }
 
@@ -101,7 +103,7 @@ function savePostedItems() {
  * @param {string} channelId - Discord channel ID where posts should be sent
  */
 async function initRedditFeed(client, channelId) {
-    console.log('Starting Reddit RSS feed monitor...');
+    log.info('Starting Reddit RSS feed monitor');
 
     // Load previously posted items from file
     loadPostedItems();
@@ -109,7 +111,7 @@ async function initRedditFeed(client, channelId) {
     // Get the target Discord channel
     const channel = await client.channels.fetch(channelId);
     if (!channel) {
-        console.error(`Channel ${channelId} not found!`);
+        log.error({ channelId }, 'Channel not found');
         return;
     }
 
@@ -123,21 +125,21 @@ async function initRedditFeed(client, channelId) {
                 postedItems.add(item.link);
             });
             savePostedItems();
-            console.log(`First run: marked ${postedItems.size} existing posts as already posted`);
+            log.info({ count: postedItems.size }, 'First run: marked existing posts as already posted');
         } else {
             // Check for any new posts immediately
             await checkForNewPosts(channel);
         }
     } catch (error) {
-        console.error('Error during initial RSS feed load:', error);
+        log.error({ err: error }, 'Error during initial RSS feed load');
     }
 
-    // Start periodic checking
-    setInterval(async () => {
+    // Start periodic checking (using timerManager for graceful shutdown)
+    timerManager.setInterval('reddit-rss-check', async () => {
         await checkForNewPosts(channel);
     }, CHECK_INTERVAL);
 
-    console.log(`Reddit feed monitor active. Checking every ${CHECK_INTERVAL / 1000 / 60} minutes.`);
+    log.info({ intervalMinutes: CHECK_INTERVAL / 1000 / 60 }, 'Reddit feed monitor active');
 }
 
 /**
@@ -199,7 +201,7 @@ async function checkForNewPosts(channel) {
             .reverse();
 
         if (newItems.length > 0) {
-            console.log(`Found ${newItems.length} new Reddit post(s)`);
+            log.info({ count: newItems.length }, 'Found new Reddit posts');
         }
 
         for (const item of newItems) {
@@ -217,7 +219,7 @@ async function checkForNewPosts(channel) {
             savePostedItems();
         }
     } catch (error) {
-        console.error('Error checking RSS feed:', error);
+        log.error({ err: error }, 'Error checking RSS feed');
     }
 }
 

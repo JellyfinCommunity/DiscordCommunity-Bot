@@ -1,6 +1,8 @@
 import { SlashCommandBuilder } from 'discord.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { timerManager } from '../utils/timerManager.js';
+import { reminderLogger as log } from '../utils/logger.js';
 
 const TIME_LIMITS = {
     minutes: 1440, // 24 hours
@@ -20,7 +22,7 @@ async function loadReminders() {
         if (error.code === 'ENOENT') {
             return [];
         }
-        console.error('Error loading reminders:', error);
+        log.error({ err: error }, 'Error loading reminders');
         return [];
     }
 }
@@ -30,7 +32,7 @@ async function saveReminders(reminders) {
     try {
         await fs.writeFile(REMINDERS_FILE, JSON.stringify(reminders, null, 2));
     } catch (error) {
-        console.error('Error saving reminders:', error);
+        log.error({ err: error }, 'Error saving reminders');
     }
 }
 
@@ -126,8 +128,8 @@ export default {
                 content: `✅ I will remind you about "${text}" in ${timeString}`
             });
 
-            // Set timeout for reminder
-            setTimeout(async () => {
+            // Set timeout for reminder (using timerManager for cleanup)
+            timerManager.setTimeout(`reminder-${reminderId}`, async () => {
                 try {
                     const channel = await interaction.client.channels.fetch(reminder.channelId);
                     await channel.send({
@@ -136,12 +138,12 @@ export default {
                     });
                     await removeReminder(reminderId);
                 } catch (error) {
-                    console.error('Error sending reminder:', error);
+                    log.error({ err: error, reminderId }, 'Error sending reminder');
                     await removeReminder(reminderId);
                 }
             }, ms);
         } catch (error) {
-            console.error('Error setting reminder:', error);
+            log.error({ err: error, userId }, 'Error setting reminder');
             await interaction.editReply({
                 content: '❌ An error occurred while setting the reminder.'
             });

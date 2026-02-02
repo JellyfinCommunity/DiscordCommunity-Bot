@@ -1,5 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { timerManager } from './utils/timerManager.js';
+import { reminderLogger as log } from './utils/logger.js';
 
 const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
 
@@ -16,8 +18,8 @@ export async function initializeReminders(client) {
             const timeLeft = reminder.reminderTime - now;
             
             if (timeLeft > 0) {
-                // Reminder is still pending, reschedule it
-                setTimeout(async () => {
+                // Reminder is still pending, reschedule it (using timerManager for cleanup)
+                timerManager.setTimeout(`reminder-${reminder.id}`, async () => {
                     try {
                         const channel = await client.channels.fetch(reminder.channelId);
                         await channel.send({
@@ -25,28 +27,28 @@ export async function initializeReminders(client) {
                             allowedMentions: { users: [reminder.userId] },
                         });
                     } catch (error) {
-                        console.error('Error sending restored reminder:', error);
+                        log.error({ err: error, reminderId: reminder.id }, 'Error sending restored reminder');
                     }
                     // Remove reminder after sending
                     await removeReminder(reminder.id);
                 }, timeLeft);
-                
+
                 activeReminders.push(reminder);
-                console.log(`Restored reminder for user ${reminder.userId}: "${reminder.text}" (${Math.round(timeLeft / 1000 / 60)} minutes left)`);
+                log.debug({ userId: reminder.userId, minutesLeft: Math.round(timeLeft / 1000 / 60) }, 'Restored reminder');
             }
         }
         
         // Save only active reminders back to file
         await fs.writeFile(REMINDERS_FILE, JSON.stringify(activeReminders, null, 2));
-        
-        console.log(`Restored ${activeReminders.length} active reminders`);
+
+        log.info({ count: activeReminders.length }, 'Restored active reminders');
     } catch (error) {
         if (error.code === 'ENOENT') {
             // File doesn't exist, create empty file
             await fs.writeFile(REMINDERS_FILE, JSON.stringify([], null, 2));
-            console.log('Created new reminders file');
+            log.info('Created new reminders file');
         } else {
-            console.error('Error initializing reminders:', error);
+            log.error({ err: error }, 'Error initializing reminders');
         }
     }
 }
@@ -59,6 +61,6 @@ async function removeReminder(reminderId) {
         const filtered = reminders.filter(r => r.id !== reminderId);
         await fs.writeFile(REMINDERS_FILE, JSON.stringify(filtered, null, 2));
     } catch (error) {
-        console.error('Error removing reminder:', error);
+        log.error({ err: error, reminderId }, 'Error removing reminder');
     }
 }
