@@ -7,6 +7,8 @@ import { EmbedBuilder } from 'discord.js';
 import { COLORS } from './config.js';
 import { timerManager } from './utils/timerManager.js';
 import { updateLogger as log } from './utils/logger.js';
+import { addJitter, addPositiveJitter } from './utils/jitter.js';
+import { truncate, sanitize, sanitizeUrl, EMBED_LIMITS } from './utils/safeEmbed.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = path.join(process.cwd(), 'data.json');
@@ -73,11 +75,12 @@ export async function initializeUpdateMonitor(client) {
     });
     timerManager.registerCron('update-monitor', job);
 
-    // Initial check on startup (after 1 minute)
+    // Initial check on startup (after 1-2 minutes with jitter to stagger startup)
+    const initialDelay = addPositiveJitter(60000, 1.0); // 60-120 seconds
     timerManager.setTimeout('initial-update-check', async () => {
         log.info('Running initial update check');
         await checkForUpdates(client);
-    }, 60000);
+    }, initialDelay);
 
     log.info('Update monitor initialized');
 }
@@ -136,8 +139,9 @@ async function checkForUpdates(client) {
 
                     item.lastChecked = new Date().toISOString();
                     
-                    // Small delay to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    // Jittered delay between API calls to avoid rate limiting
+                    const delay = addJitter(1000, 0.5); // 500-1500ms
+                    await new Promise(resolve => setTimeout(resolve, delay));
                     
                 } catch (error) {
                     log.error({ err: error, name: item.name }, 'Error checking updates for item');
@@ -194,14 +198,14 @@ async function sendUpdateNotification(client, item, release, category) {
         }
 
         const releaseDate = new Date(release.published_at);
-        
+
         // Map category keys to config keys
         const categoryColorMap = {
             third_party_clients: COLORS.clients,
             plugins: COLORS.plugins,
             services: COLORS.services
         };
-        
+
         const categoryInfo = {
             third_party_clients: { icon: "🔧", name: "Third Party Client" },
             plugins: { icon: "🔧", name: "Plugin" },
@@ -210,33 +214,47 @@ async function sendUpdateNotification(client, item, release, category) {
 
         const categoryData = categoryInfo[category] || { icon: "📦", name: "Update" };
 
+        // Sanitize and validate all external data
+        const safeName = truncate(sanitize(item.name), 200);
+        const safeTagName = truncate(sanitize(release.tag_name), 50);
+        const safeReleaseUrl = sanitizeUrl(release.html_url);
+        const safeRepoUrl = sanitizeUrl(item.repo);
+        const safeReleaseBody = truncate(sanitize(release.body || 'No release notes available.'), 500);
+
         const embed = new EmbedBuilder()
             .setColor(categoryColorMap[category] || 0x00FF00)
             .setAuthor({
-                name: `New ${categoryData.name} Release!`,
+                name: truncate(`New ${categoryData.name} Release!`, EMBED_LIMITS.AUTHOR_NAME),
                 iconURL: "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/web/icon-transparent.png"
             })
-            .setTitle(`${categoryData.icon} ${item.name} - ${release.tag_name}`)
-            .setURL(release.html_url)
-            .setDescription(truncateText(release.body || 'No release notes available.', 500))
+            .setTitle(truncate(`${categoryData.icon} ${safeName} - ${safeTagName}`, EMBED_LIMITS.TITLE))
+            .setURL(safeReleaseUrl)
+            .setDescription(safeReleaseBody)
             .addFields(
                 { name: "📅 Released", value: releaseDate.toLocaleDateString(), inline: true },
-                { name: "🔗 Repository", value: `[View on GitHub](${item.repo})`, inline: true }
+                { name: "🔗 Repository", value: safeRepoUrl ? `[View on GitHub](${safeRepoUrl})` : 'N/A', inline: true }
             )
             .setTimestamp(releaseDate)
-            .setFooter({ text: `${categoryData.name} Update` });
+            .setFooter({ text: truncate(`${categoryData.name} Update`, EMBED_LIMITS.FOOTER_TEXT) });
 
         // Add developers for clients
         if (category === 'third_party_clients' && item.developers) {
             const developersText = item.developers
-                .map(dev => dev.link ? `[${dev.name}](${dev.link})` : dev.name)
+                .map(dev => {
+                    const safeDev = sanitize(dev.name || 'Unknown');
+                    const safeLink = sanitizeUrl(dev.link);
+                    return safeLink ? `[${safeDev}](${safeLink})` : safeDev;
+                })
                 .join(', ');
-            embed.addFields({ name: "👨‍💻 Developers", value: developersText, inline: true });
+            embed.addFields({ name: "👨‍💻 Developers", value: truncate(developersText, EMBED_LIMITS.FIELD_VALUE), inline: true });
         }
 
         // Add status link for services
         if (category === 'services' && item.statusUrl) {
-            embed.addFields({ name: "🌐 Status", value: `[Check Status](${item.statusUrl})`, inline: true });
+            const safeStatusUrl = sanitizeUrl(item.statusUrl);
+            if (safeStatusUrl) {
+                embed.addFields({ name: "🌐 Status", value: `[Check Status](${safeStatusUrl})`, inline: true });
+            }
         }
 
         await channel.send({ embeds: [embed] });
@@ -247,16 +265,6 @@ async function sendUpdateNotification(client, item, release, category) {
     }
 }
 
-function truncateText(text, maxLength) {
-    if (text.length <= maxLength) return text;
-    
-    // Remove markdown formatting for cleaner truncation
-    const cleanText = text.replace(/[*_`~|]/g, '').replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
-    
-    if (cleanText.length <= maxLength) return cleanText;
-    
-    return cleanText.substring(0, maxLength - 3) + '...';
-}
 
 // Manual check function for testing
 export async function manualUpdateCheck(client) {

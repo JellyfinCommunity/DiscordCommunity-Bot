@@ -3,13 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { timerManager } from '../utils/timerManager.js';
 import { reminderLogger as log } from '../utils/logger.js';
-
-const TIME_LIMITS = {
-    minutes: 1440, // 24 hours
-    hours: 168,    // 1 week
-    days: 365,     // 1 year
-    weeks: 52      // 1 year
-};
+import { validateReminderText, validateTimeAmount } from '../utils/inputValidator.js';
 
 const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
 
@@ -82,32 +76,34 @@ export default {
             const timeUnit = interaction.options.getString('unit');
             const userId = interaction.user.id;
             const channel = interaction.channel;
-            const text = interaction.options.getString('text');
+            const rawText = interaction.options.getString('text');
+
+            // Validate and sanitize reminder text
+            const textValidation = validateReminderText(rawText);
+            if (!textValidation.valid) {
+                return await interaction.editReply({
+                    content: `❌ ${textValidation.error}`
+                });
+            }
+            const text = textValidation.sanitized;
+
+            // Validate time amount
+            const timeValidation = validateTimeAmount(timeAmount, timeUnit);
+            if (!timeValidation.valid) {
+                return await interaction.editReply({
+                    content: `❌ ${timeValidation.error}`
+                });
+            }
 
             // Check bot permissions
-            if (!channel.permissionsFor(channel.guild.members.me).has('ViewChannel') || 
+            if (!channel.permissionsFor(channel.guild.members.me).has('ViewChannel') ||
                 !channel.permissionsFor(channel.guild.members.me).has('SendMessages')) {
                 return await interaction.editReply({
                     content: '❌ I cannot send messages in this channel. Please check my permissions.'
                 });
             }
 
-            // Check time limits
-            if (timeAmount > TIME_LIMITS[timeUnit]) {
-                return await interaction.editReply({
-                    content: `❌ You cannot set a reminder for more than ${TIME_LIMITS[timeUnit]} ${timeUnit}!`
-                });
-            }
-
-            // Calculate reminder time
-            const msMultiplier = {
-                minutes: 60 * 1000,
-                hours: 60 * 60 * 1000,
-                days: 24 * 60 * 60 * 1000,
-                weeks: 7 * 24 * 60 * 60 * 1000
-            };
-
-            const ms = timeAmount * msMultiplier[timeUnit];
+            const ms = timeValidation.ms;
             const reminderTime = Date.now() + ms;
             const reminderId = `${userId}_${reminderTime}`;
 

@@ -2,6 +2,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { timerManager } from './utils/timerManager.js';
 import { reminderLogger as log } from './utils/logger.js';
+import { validateReminders } from './utils/schemas.js';
+import { sanitizeString } from './utils/inputValidator.js';
 
 const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
 
@@ -9,8 +11,16 @@ const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
 export async function initializeReminders(client) {
     try {
         const data = await fs.readFile(REMINDERS_FILE, 'utf8');
-        const reminders = JSON.parse(data);
-        
+        const parsedReminders = JSON.parse(data);
+
+        // Validate reminders against schema
+        const validation = validateReminders(parsedReminders);
+        if (!validation.valid) {
+            log.warn({ errors: validation.errors }, 'Some reminders failed validation');
+        }
+
+        // Use only valid reminders
+        const reminders = validation.validReminders;
         const activeReminders = [];
         const now = Date.now();
         
@@ -22,8 +32,10 @@ export async function initializeReminders(client) {
                 timerManager.setTimeout(`reminder-${reminder.id}`, async () => {
                     try {
                         const channel = await client.channels.fetch(reminder.channelId);
+                        // Sanitize text before sending to prevent injection
+                        const safeText = sanitizeString(reminder.text, { maxLength: 500 });
                         await channel.send({
-                            content: `<@${reminder.userId}> 🔔 Reminder: ${reminder.text}`,
+                            content: `<@${reminder.userId}> 🔔 Reminder: ${safeText}`,
                             allowedMentions: { users: [reminder.userId] },
                         });
                     } catch (error) {

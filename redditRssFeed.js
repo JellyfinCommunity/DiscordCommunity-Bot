@@ -5,6 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { timerManager } from './utils/timerManager.js';
 import { redditLogger as log } from './utils/logger.js';
+import { addJitter } from './utils/jitter.js';
+import { truncate, sanitize, sanitizeUrl } from './utils/safeEmbed.js';
 
 const parser = new Parser({
     timeout: 20000, // 20 second timeout (faster retries)
@@ -146,12 +148,17 @@ async function initRedditFeed(client, channelId) {
         log.error({ err: error }, 'Error during initial RSS feed load');
     }
 
-    // Start periodic checking (using timerManager for graceful shutdown)
-    timerManager.setInterval('reddit-rss-check', async () => {
-        await checkForNewPosts(channel);
-    }, CHECK_INTERVAL);
+    // Start periodic checking with jitter (using timerManager for graceful shutdown)
+    const scheduleNextCheck = () => {
+        const jitteredInterval = addJitter(CHECK_INTERVAL, 0.15); // 15% jitter
+        timerManager.setTimeout('reddit-rss-check', async () => {
+            await checkForNewPosts(channel);
+            scheduleNextCheck(); // Schedule next check after completion
+        }, jitteredInterval);
+    };
+    scheduleNextCheck();
 
-    log.info({ intervalMinutes: CHECK_INTERVAL / 1000 / 60 }, 'Reddit feed monitor active');
+    log.info({ intervalMinutes: CHECK_INTERVAL / 1000 / 60, jitter: '15%' }, 'Reddit feed monitor active');
 }
 
 /**
@@ -164,25 +171,31 @@ async function postItem(channel, item) {
     const { imageUrl, textContent } = extractContent(item.content || item.contentSnippet || '');
 
     // Extract flair from categories if available
-    const flair = item.categories && item.categories.length > 0 ? item.categories[0] : null;
+    const flair = item.categories && item.categories.length > 0 ? sanitize(item.categories[0]) : null;
 
-    // Clean up author name
-    const authorName = (item.author || 'Unknown').replace(/^\/?u\//, '');
+    // Clean up and sanitize author name
+    const authorName = sanitize((item.author || 'Unknown').replace(/^\/?u\//, ''));
 
-    // Build title with flair prefix if available
-    const title = flair ? `[${flair}] ${item.title}` : item.title;
+    // Build title with flair prefix if available (truncate to Discord limit)
+    const rawTitle = flair ? `[${flair}] ${item.title}` : item.title;
+    const title = truncate(sanitize(rawTitle), 256);
 
-    // Create Discord embed message
+    // Validate URLs
+    const itemUrl = sanitizeUrl(item.link);
+    const authorUrl = sanitizeUrl(`https://www.reddit.com/user/${encodeURIComponent(authorName)}`);
+    const safeImageUrl = imageUrl ? sanitizeUrl(imageUrl) : null;
+
+    // Create Discord embed message with safe values
     const embed = {
         color: 0xFF5700, // Reddit orange
         title: title,
-        url: item.link,
+        url: itemUrl,
         author: {
-            name: `u/${authorName}`,
-            url: `https://www.reddit.com/user/${authorName}`,
+            name: truncate(`u/${authorName}`, 256),
+            url: authorUrl,
             icon_url: 'https://www.redditstatic.com/avatars/defaults/v2/avatar_default_1.png',
         },
-        description: textContent || undefined,
+        description: textContent ? truncate(textContent, 4096) : undefined,
         timestamp: new Date(item.pubDate),
         footer: {
             text: 'r/JellyfinCommunity',
@@ -190,9 +203,9 @@ async function postItem(channel, item) {
         },
     };
 
-    // Add image if found (use large image, not thumbnail)
-    if (imageUrl) {
-        embed.image = { url: imageUrl };
+    // Add image if found and valid (use large image, not thumbnail)
+    if (safeImageUrl) {
+        embed.image = { url: safeImageUrl };
     }
 
     // Send to Discord

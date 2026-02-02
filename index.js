@@ -10,6 +10,7 @@ import { validateEnv } from './utils/validateEnv.js';
 import { initGlobalErrorHandlers, wrapEventHandler } from './utils/errorHandler.js';
 import { initGracefulShutdown } from './utils/shutdown.js';
 import { botLogger as log } from './utils/logger.js';
+import { rateLimiter } from './utils/rateLimiter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -80,6 +81,22 @@ client.on('interactionCreate', wrapEventHandler(async interaction => {
   if (interaction.isCommand()) {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
+
+    // Check rate limit
+    const rateCheck = rateLimiter.check(interaction.user.id, interaction.commandName);
+    if (!rateCheck.allowed) {
+      log.warn({ userId: interaction.user.id, command: interaction.commandName }, 'Command rate limited');
+      await interaction.reply({
+        content: `⏱️ ${rateCheck.message}`,
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    // Warn if approaching limit
+    if (rateCheck.warning) {
+      log.info({ userId: interaction.user.id, command: interaction.commandName }, 'User approaching rate limit');
+    }
 
     try {
       await command.execute(interaction);
