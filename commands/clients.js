@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { COLORS, CATEGORY_INFO, isFeaturedProject, sortByFeatured } from '../config.js';
 import { createProjectEmbed } from '../embedHelper.js';
+import { commandLogger as log } from '../utils/logger.js';
 
 const DATA_FILE = path.join(process.cwd(), 'data.json');
 
@@ -98,7 +99,7 @@ export default {
             }
 
         } catch (error) {
-            console.error('Error executing clients command:', error);
+            log.error({ err: error }, 'Error executing clients command');
             await interaction.editReply({
                 content: "❌ An error occurred while fetching client information."
             });
