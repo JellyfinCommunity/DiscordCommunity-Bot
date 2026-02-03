@@ -1,5 +1,4 @@
 import fs from 'fs/promises';
-import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
@@ -9,6 +8,7 @@ import { timerManager } from './utils/timerManager.js';
 import { updateLogger as log } from './utils/logger.js';
 import { addJitter, addPositiveJitter } from './utils/jitter.js';
 import { truncate, sanitize, sanitizeUrl, EMBED_LIMITS } from './utils/safeEmbed.js';
+import { writeJsonAtomic, writeJsonAtomicSync, readJsonWithRecoverySync } from './utils/atomicJson.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = path.join(process.cwd(), 'data.json');
@@ -20,14 +20,7 @@ const UPDATE_CHANNEL_ID = process.env.UPDATE_CHANNEL_ID;
  * Load full posted items data from JSON file
  */
 function loadPostedItemsFile() {
-    try {
-        if (fsSync.existsSync(POSTED_ITEMS_FILE)) {
-            return JSON.parse(fsSync.readFileSync(POSTED_ITEMS_FILE, 'utf8'));
-        }
-    } catch (error) {
-        log.error({ err: error }, 'Error loading posted items file');
-    }
-    return { redditPosts: [], updatePosts: [] };
+    return readJsonWithRecoverySync(POSTED_ITEMS_FILE, { redditPosts: [], updatePosts: [] });
 }
 
 /**
@@ -35,7 +28,7 @@ function loadPostedItemsFile() {
  */
 function savePostedItemsFile(data) {
     try {
-        fsSync.writeFileSync(POSTED_ITEMS_FILE, JSON.stringify(data, null, 2));
+        writeJsonAtomicSync(POSTED_ITEMS_FILE, data);
     } catch (error) {
         log.error({ err: error }, 'Error saving posted items file');
     }
@@ -150,8 +143,8 @@ async function checkForUpdates(client) {
         }
 
         if (hasUpdates) {
-            // Save updated data
-            await fs.writeFile(DATA_FILE, JSON.stringify(jsonData, null, 2));
+            // Save updated data atomically
+            await writeJsonAtomic(DATA_FILE, jsonData);
         }
 
     } catch (error) {

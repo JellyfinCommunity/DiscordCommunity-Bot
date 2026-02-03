@@ -1,9 +1,9 @@
 import { SlashCommandBuilder } from 'discord.js';
-import fs from 'fs/promises';
 import path from 'path';
 import { timerManager } from '../utils/timerManager.js';
 import { reminderLogger as log } from '../utils/logger.js';
 import { sanitizeString } from '../utils/sanitize.js';
+import { writeJsonAtomic, readJsonWithRecovery } from '../utils/atomicJson.js';
 
 const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
 
@@ -67,12 +67,8 @@ function validateTimeAmount(amount, unit) {
 // Load reminders from file
 async function loadReminders() {
     try {
-        const data = await fs.readFile(REMINDERS_FILE, 'utf8');
-        return JSON.parse(data);
+        return await readJsonWithRecovery(REMINDERS_FILE, []);
     } catch (error) {
-        if (error.code === 'ENOENT') {
-            return [];
-        }
         log.error({ err: error }, 'Error loading reminders');
         return [];
     }
@@ -81,7 +77,7 @@ async function loadReminders() {
 // Save reminders to file
 async function saveReminders(reminders) {
     try {
-        await fs.writeFile(REMINDERS_FILE, JSON.stringify(reminders, null, 2));
+        await writeJsonAtomic(REMINDERS_FILE, reminders);
     } catch (error) {
         log.error({ err: error }, 'Error saving reminders');
     }

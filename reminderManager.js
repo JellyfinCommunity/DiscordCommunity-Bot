@@ -4,14 +4,14 @@ import { timerManager } from './utils/timerManager.js';
 import { reminderLogger as log } from './utils/logger.js';
 import { validateReminders } from './utils/schemas.js';
 import { sanitizeString } from './utils/sanitize.js';
+import { writeJsonAtomic, readJsonWithRecovery } from './utils/atomicJson.js';
 
 const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
 
 // Load and restore reminders on bot startup
 export async function initializeReminders(client) {
     try {
-        const data = await fs.readFile(REMINDERS_FILE, 'utf8');
-        const parsedReminders = JSON.parse(data);
+        const parsedReminders = await readJsonWithRecovery(REMINDERS_FILE, []);
 
         // Validate reminders against schema
         const validation = validateReminders(parsedReminders);
@@ -51,27 +51,20 @@ export async function initializeReminders(client) {
         }
         
         // Save only active reminders back to file
-        await fs.writeFile(REMINDERS_FILE, JSON.stringify(activeReminders, null, 2));
+        await writeJsonAtomic(REMINDERS_FILE, activeReminders);
 
         log.info({ count: activeReminders.length }, 'Restored active reminders');
     } catch (error) {
-        if (error.code === 'ENOENT') {
-            // File doesn't exist, create empty file
-            await fs.writeFile(REMINDERS_FILE, JSON.stringify([], null, 2));
-            log.info('Created new reminders file');
-        } else {
-            log.error({ err: error }, 'Error initializing reminders');
-        }
+        log.error({ err: error }, 'Error initializing reminders');
     }
 }
 
 // Helper function to remove reminder
 async function removeReminder(reminderId) {
     try {
-        const data = await fs.readFile(REMINDERS_FILE, 'utf8');
-        const reminders = JSON.parse(data);
+        const reminders = await readJsonWithRecovery(REMINDERS_FILE, []);
         const filtered = reminders.filter(r => r.id !== reminderId);
-        await fs.writeFile(REMINDERS_FILE, JSON.stringify(filtered, null, 2));
+        await writeJsonAtomic(REMINDERS_FILE, filtered);
     } catch (error) {
         log.error({ err: error, reminderId }, 'Error removing reminder');
     }

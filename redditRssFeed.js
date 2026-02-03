@@ -1,12 +1,12 @@
 // Import RSS Parser
 import Parser from 'rss-parser';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { timerManager } from './utils/timerManager.js';
 import { redditLogger as log } from './utils/logger.js';
 import { addJitter } from './utils/jitter.js';
 import { truncate, sanitize, sanitizeUrl } from './utils/safeEmbed.js';
+import { writeJsonAtomicSync, readJsonWithRecoverySync } from './utils/atomicJson.js';
 
 const parser = new Parser({
     timeout: 20000, // 20 second timeout (faster retries)
@@ -61,14 +61,7 @@ let postedItems = new Set();
  * Load full posted items data from JSON file
  */
 function loadPostedItemsFile() {
-    try {
-        if (fs.existsSync(POSTED_ITEMS_FILE)) {
-            return JSON.parse(fs.readFileSync(POSTED_ITEMS_FILE, 'utf8'));
-        }
-    } catch (error) {
-        log.error({ err: error }, 'Error loading posted items file');
-    }
-    return { redditPosts: [], updatePosts: [] };
+    return readJsonWithRecoverySync(POSTED_ITEMS_FILE, { redditPosts: [], updatePosts: [] });
 }
 
 /**
@@ -76,7 +69,7 @@ function loadPostedItemsFile() {
  */
 function savePostedItemsFile(data) {
     try {
-        fs.writeFileSync(POSTED_ITEMS_FILE, JSON.stringify(data, null, 2));
+        writeJsonAtomicSync(POSTED_ITEMS_FILE, data);
     } catch (error) {
         log.error({ err: error }, 'Error saving posted items file');
     }
