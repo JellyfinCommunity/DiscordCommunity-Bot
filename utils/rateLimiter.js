@@ -4,6 +4,7 @@
  */
 
 import { botLogger as log } from './logger.js';
+import { timerManager } from './timerManager.js';
 
 class RateLimiter {
     constructor() {
@@ -24,8 +25,8 @@ class RateLimiter {
         // Blocked users: userId -> unblockTime
         this.blocked = new Map();
 
-        // Cleanup old entries every 5 minutes
-        setInterval(() => this.cleanup(), 5 * 60 * 1000);
+        // Cleanup old entries every 5 minutes (using timerManager for graceful shutdown)
+        timerManager.setInterval('rate-limiter-cleanup', () => this.cleanup(), 5 * 60 * 1000);
     }
 
     /**
