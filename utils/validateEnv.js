@@ -3,6 +3,10 @@
  * Validates required environment variables on startup and exits with clear errors if missing
  */
 
+import { createRedactedConsole } from './redact.js';
+
+const safeConsole = createRedactedConsole();
+
 const REQUIRED_ENV_VARS = {
     TOKEN: {
         description: 'Discord bot token',
@@ -107,18 +111,18 @@ export function validateEnv() {
         }
     }
 
-    // Log warnings for optional variables
+    // Log warnings for optional variables (using redacted console to prevent secret leaks)
     if (warnings.length > 0) {
-        console.warn('\n⚠️  Environment Warnings:');
-        warnings.forEach(warning => console.warn(`   - ${warning}`));
-        console.warn('');
+        safeConsole.warn('\n⚠️  Environment Warnings:');
+        warnings.forEach(warning => safeConsole.warn(`   - ${warning}`));
+        safeConsole.warn('');
     }
 
     // Exit if required variables are missing/invalid
     if (errors.length > 0) {
-        console.error('\n❌ Environment Validation Failed:\n');
-        errors.forEach(error => console.error(`   ❌ ${error}`));
-        console.error('\n   Bot cannot start. Please check your .env file.\n');
+        safeConsole.error('\n❌ Environment Validation Failed:\n');
+        errors.forEach(error => safeConsole.error(`   ❌ ${error}`));
+        safeConsole.error('\n   Bot cannot start. Please check your .env file.\n');
         process.exit(1);
     }
 
