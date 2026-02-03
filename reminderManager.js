@@ -3,7 +3,7 @@ import path from 'path';
 import { timerManager } from './utils/timerManager.js';
 import { reminderLogger as log } from './utils/logger.js';
 import { validateReminders } from './utils/schemas.js';
-import { sanitizeString } from './utils/inputValidator.js';
+import { sanitizeString } from './utils/sanitize.js';
 
 const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
 

@@ -3,9 +3,66 @@ import fs from 'fs/promises';
 import path from 'path';
 import { timerManager } from '../utils/timerManager.js';
 import { reminderLogger as log } from '../utils/logger.js';
-import { validateReminderText, validateTimeAmount } from '../utils/inputValidator.js';
+import { sanitizeString } from '../utils/sanitize.js';
 
 const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
+
+/**
+ * Validate reminder text
+ * @param {string} text - Reminder text
+ * @returns {{ valid: boolean, sanitized?: string, error?: string }}
+ */
+function validateReminderText(text) {
+    if (!text || typeof text !== 'string') {
+        return { valid: false, error: 'Reminder text is required' };
+    }
+
+    const sanitized = sanitizeString(text, {
+        maxLength: 500,
+        allowNewlines: false,
+        allowMarkdown: true
+    });
+
+    if (sanitized.length < 1) {
+        return { valid: false, error: 'Reminder text cannot be empty' };
+    }
+
+    if (sanitized.length > 500) {
+        return { valid: false, error: 'Reminder text cannot exceed 500 characters' };
+    }
+
+    return { valid: true, sanitized };
+}
+
+/**
+ * Validate time amount for reminders
+ * @param {number} amount - Time amount
+ * @param {string} unit - Time unit (minutes, hours, days, weeks)
+ * @returns {{ valid: boolean, ms?: number, error?: string }}
+ */
+function validateTimeAmount(amount, unit) {
+    const limits = {
+        minutes: { max: 1440, multiplier: 60 * 1000 },
+        hours: { max: 168, multiplier: 60 * 60 * 1000 },
+        days: { max: 365, multiplier: 24 * 60 * 60 * 1000 },
+        weeks: { max: 52, multiplier: 7 * 24 * 60 * 60 * 1000 }
+    };
+
+    if (!Number.isInteger(amount) || amount < 1) {
+        return { valid: false, error: 'Time amount must be a positive integer' };
+    }
+
+    const unitConfig = limits[unit];
+    if (!unitConfig) {
+        return { valid: false, error: 'Invalid time unit' };
+    }
+
+    if (amount > unitConfig.max) {
+        return { valid: false, error: `Cannot set reminder for more than ${unitConfig.max} ${unit}` };
+    }
+
+    return { valid: true, ms: amount * unitConfig.multiplier };
+}
 
 // Load reminders from file
 async function loadReminders() {

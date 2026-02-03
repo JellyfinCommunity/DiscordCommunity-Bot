@@ -3,7 +3,9 @@
  * Provides validation and type safety for data structures
  */
 
-import { validateStructure, validateUrl, validateUserId } from './inputValidator.js';
+import { validateStructure } from './validate.js';
+import { validateUrl } from './validators/url.js';
+import { validateUserId } from './validators/discord.js';
 import { botLogger as log } from './logger.js';
 
 /**
