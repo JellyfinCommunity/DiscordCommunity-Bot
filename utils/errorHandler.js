@@ -4,6 +4,7 @@
  */
 
 import { createModuleLogger } from './logger.js';
+import { isShuttingDown } from './shutdown.js';
 
 const log = createModuleLogger('error-handler');
 
@@ -21,6 +22,11 @@ export function initGlobalErrorHandlers() {
     // Handle uncaught exceptions (must exit - state may be corrupted)
     process.on('uncaughtException', (error) => {
         log.fatal({ err: error }, 'Uncaught Exception - Bot will restart');
+        // Skip force-exit if already shutting down gracefully
+        if (isShuttingDown) {
+            log.info('Already shutting down - skipping force exit');
+            return;
+        }
         // Give time to log, then exit for process manager to restart
         setTimeout(() => process.exit(1), 1000);
     });

@@ -8,6 +8,8 @@ import { createModuleLogger } from './logger.js';
 
 const log = createModuleLogger('shutdown');
 
+const SHUTDOWN_TIMEOUT_MS = 30000;
+
 let client = null;
 let isShuttingDown = false;
 
@@ -40,7 +42,11 @@ async function handleShutdown(signal) {
     isShuttingDown = true;
     log.info({ signal }, 'Starting graceful shutdown');
 
-    try {
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Shutdown timeout')), SHUTDOWN_TIMEOUT_MS);
+    });
+
+    const shutdownPromise = (async () => {
         // Clear all timers first
         timerManager.clearAll();
 
@@ -52,11 +58,15 @@ async function handleShutdown(signal) {
         }
 
         log.info('Graceful shutdown complete');
+    })();
+
+    try {
+        await Promise.race([shutdownPromise, timeoutPromise]);
         process.exit(0);
     } catch (error) {
-        log.error({ err: error }, 'Error during shutdown');
+        log.error({ err: error }, 'Shutdown timeout - forcing exit');
         process.exit(1);
     }
 }
 
-export { handleShutdown };
+export { handleShutdown, isShuttingDown };
