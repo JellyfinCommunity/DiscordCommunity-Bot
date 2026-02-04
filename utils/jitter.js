@@ -26,12 +26,3 @@ export function addPositiveJitter(baseInterval, maxJitterPercent = 0.2) {
     const jitter = Math.random() * maxJitter;
     return Math.round(baseInterval + jitter);
 }
-
-/**
- * Get a random delay for staggering initial startup tasks
- * @param {number} maxDelayMs - Maximum delay in milliseconds
- * @returns {number} Random delay
- */
-export function getStartupDelay(maxDelayMs = 30000) {
-    return Math.round(Math.random() * maxDelayMs);
-}

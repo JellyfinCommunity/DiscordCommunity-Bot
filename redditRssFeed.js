@@ -49,7 +49,11 @@ async function fetchWithRetry(url, maxRetries = 3) {
             if (attempt === maxRetries) throw error;
             const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
             log.warn({ attempt, maxRetries, delaySeconds: delay / 1000 }, 'RSS fetch failed, retrying');
-            await new Promise(r => setTimeout(r, delay));
+            // Use tracked sleep for graceful shutdown
+            const completed = await timerManager.sleep(`rss-retry-${attempt}`, delay);
+            if (!completed) {
+                throw new Error('RSS fetch cancelled due to shutdown');
+            }
         }
     }
 }
@@ -222,14 +226,17 @@ async function checkForNewPosts(channel) {
             log.info({ count: newItems.length }, 'Found new Reddit posts');
         }
 
-        for (const item of newItems) {
+        for (let i = 0; i < newItems.length; i++) {
+            const item = newItems[i];
             // Mark as posted immediately to avoid duplicates
             postedItems.add(item.link);
 
             await postItem(channel, item);
 
-            // Small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Small delay to avoid rate limiting (tracked for graceful shutdown)
+            if (i < newItems.length - 1) {
+                await timerManager.sleep(`rss-post-delay-${i}`, 1000);
+            }
         }
 
         // Save to file if we posted anything

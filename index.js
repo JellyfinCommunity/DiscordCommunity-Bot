@@ -141,6 +141,7 @@ client.on('messageCreate', wrapEventHandler(async message => {
 
 // Keyword check
 function hasPiracyKeywords(text) {
+  if (!text || typeof text !== 'string') return false;
   const lowerText = text.trim().toLowerCase();
   const piracyKeywords = [
     "1fichier", "123movies", "1337x", "alldebrid", "anonfiles",

@@ -1,9 +1,9 @@
 import { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, ComponentType } from "discord.js";
-import fs from 'fs/promises';
 import path from 'path';
-import { COLORS, CATEGORY_INFO, isFeaturedProject, sortByFeatured } from '../config.js';
+import { COLORS, CATEGORY_INFO, isFeaturedProject, sortByFeatured, DISCORD_SELECT_MENU_LIMIT } from '../config.js';
 import { createProjectEmbed } from '../embedHelper.js';
 import { commandLogger as log } from '../utils/logger.js';
+import { readJsonWithRecovery } from '../utils/atomicJson.js';
 
 const DATA_FILE = path.join(process.cwd(), 'data.json');
 
@@ -17,8 +17,7 @@ export default {
         await interaction.deferReply();
 
         try {
-            const data = await fs.readFile(DATA_FILE, 'utf8');
-            const jsonData = JSON.parse(data);
+            const jsonData = await readJsonWithRecovery(DATA_FILE, { plugins: [] });
 
             if (!jsonData.plugins || jsonData.plugins.length === 0) {
                 await interaction.editReply({
@@ -30,7 +29,7 @@ export default {
             const sortedPlugins = sortByFeatured(jsonData.plugins);
             const categoryInfo = CATEGORY_INFO.plugins;
 
-            const options = sortedPlugins.slice(0, 25).map(plugin => {
+            const options = sortedPlugins.slice(0, DISCORD_SELECT_MENU_LIMIT).map(plugin => {
                 const isFeatured = isFeaturedProject(plugin);
                 return {
                     label: `${isFeatured ? '⭐ ' : ''}${plugin.name.substring(0, 97)}`,
@@ -91,10 +90,19 @@ export default {
                 });
 
             } catch (error) {
-                await interaction.editReply({
-                    content: "⏰ Selection timed out. Use `/plugins` to try again.",
-                    components: []
-                });
+                // Only show timeout message for collector timeout errors
+                if (error.code === 'InteractionCollectorError' || error.message?.includes('time')) {
+                    await interaction.editReply({
+                        content: "⏰ Selection timed out. Use `/plugins` to try again.",
+                        components: []
+                    });
+                } else {
+                    log.error({ err: error }, 'Error during plugin selection');
+                    await interaction.editReply({
+                        content: "❌ An error occurred during selection.",
+                        components: []
+                    });
+                }
             }
 
         } catch (error) {

@@ -1,4 +1,3 @@
-import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
@@ -8,7 +7,8 @@ import { timerManager } from './utils/timerManager.js';
 import { updateLogger as log } from './utils/logger.js';
 import { addJitter, addPositiveJitter } from './utils/jitter.js';
 import { truncate, sanitize, sanitizeUrl, EMBED_LIMITS } from './utils/safeEmbed.js';
-import { writeJsonAtomic, writeJsonAtomicSync, readJsonWithRecoverySync } from './utils/atomicJson.js';
+import { writeJsonAtomic, writeJsonAtomicSync, readJsonWithRecoverySync, readJsonWithRecovery } from './utils/atomicJson.js';
+import { validateDataFile } from './utils/schemas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = path.join(process.cwd(), 'data.json');
@@ -80,8 +80,7 @@ export async function initializeUpdateMonitor(client) {
 
 async function checkForUpdates(client) {
     try {
-        const data = await fs.readFile(DATA_FILE, 'utf8');
-        const jsonData = JSON.parse(data);
+        const jsonData = await readJsonWithRecovery(DATA_FILE, { third_party_clients: [], plugins: [], services: [] });
         let hasUpdates = false;
 
         // Check third_party_clients, plugins, and services
@@ -131,10 +130,10 @@ async function checkForUpdates(client) {
                     }
 
                     item.lastChecked = new Date().toISOString();
-                    
-                    // Jittered delay between API calls to avoid rate limiting
+
+                    // Jittered delay between API calls to avoid rate limiting (tracked for graceful shutdown)
                     const delay = addJitter(1000, 0.5); // 500-1500ms
-                    await new Promise(resolve => setTimeout(resolve, delay));
+                    await timerManager.sleep(`update-check-delay-${item.name}`, delay);
                     
                 } catch (error) {
                     log.error({ err: error, name: item.name }, 'Error checking updates for item');
@@ -143,8 +142,14 @@ async function checkForUpdates(client) {
         }
 
         if (hasUpdates) {
-            // Save updated data atomically
-            await writeJsonAtomic(DATA_FILE, jsonData);
+            // Validate data before saving to prevent corruption
+            const validation = validateDataFile(jsonData);
+            if (!validation.valid) {
+                log.error({ errors: validation.errors }, 'Data validation failed, not saving');
+            } else {
+                // Save updated data atomically
+                await writeJsonAtomic(DATA_FILE, jsonData);
+            }
         }
 
     } catch (error) {
@@ -156,10 +161,10 @@ async function fetchLatestRelease(repoUrl) {
     // Extract owner/repo from GitHub URL
     const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
     if (!match) return null;
-    
+
     const [, owner, repo] = match;
     const url = `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
-    
+
     try {
         const response = await fetch(url, {
             headers: {
@@ -173,6 +178,25 @@ async function fetchLatestRelease(repoUrl) {
                 // No releases found
                 return null;
             }
+
+            // Handle rate limiting
+            if (response.status === 403 || response.status === 429) {
+                const remaining = response.headers.get('X-RateLimit-Remaining');
+                const resetTime = response.headers.get('X-RateLimit-Reset');
+                const retryAfter = response.headers.get('Retry-After');
+
+                log.warn({
+                    status: response.status,
+                    remaining,
+                    resetTime: resetTime ? new Date(parseInt(resetTime) * 1000).toISOString() : null,
+                    retryAfter,
+                    repo: `${owner}/${repo}`
+                }, 'GitHub API rate limited');
+
+                // Return null to skip this check rather than throwing
+                return null;
+            }
+
             throw new Error(`GitHub API responded with ${response.status}`);
         }
 

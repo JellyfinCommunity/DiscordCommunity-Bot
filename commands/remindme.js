@@ -1,11 +1,8 @@
 import { SlashCommandBuilder } from 'discord.js';
-import path from 'path';
 import { timerManager } from '../utils/timerManager.js';
 import { reminderLogger as log } from '../utils/logger.js';
 import { sanitizeString } from '../utils/sanitize.js';
-import { writeJsonAtomic, readJsonWithRecovery } from '../utils/atomicJson.js';
-
-const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
+import { addReminder, removeReminder } from '../reminderManager.js';
 
 /**
  * Validate reminder text
@@ -62,39 +59,6 @@ function validateTimeAmount(amount, unit) {
     }
 
     return { valid: true, ms: amount * unitConfig.multiplier };
-}
-
-// Load reminders from file
-async function loadReminders() {
-    try {
-        return await readJsonWithRecovery(REMINDERS_FILE, []);
-    } catch (error) {
-        log.error({ err: error }, 'Error loading reminders');
-        return [];
-    }
-}
-
-// Save reminders to file
-async function saveReminders(reminders) {
-    try {
-        await writeJsonAtomic(REMINDERS_FILE, reminders);
-    } catch (error) {
-        log.error({ err: error }, 'Error saving reminders');
-    }
-}
-
-// Add reminder
-async function addReminder(reminder) {
-    const reminders = await loadReminders();
-    reminders.push(reminder);
-    await saveReminders(reminders);
-}
-
-// Remove reminder
-async function removeReminder(reminderId) {
-    const reminders = await loadReminders();
-    const filtered = reminders.filter(r => r.id !== reminderId);
-    await saveReminders(filtered);
 }
 
 export default {
@@ -169,7 +133,7 @@ export default {
                 guildId: interaction.guildId
             };
 
-            // Save reminder
+            // Save reminder (mutex-protected via reminderManager)
             await addReminder(reminder);
 
             const timeString = `${timeAmount} ${timeUnit}`;
@@ -192,7 +156,7 @@ export default {
                 }
             }, ms);
         } catch (error) {
-            log.error({ err: error, userId }, 'Error setting reminder');
+            log.error({ err: error, userId: interaction.user.id }, 'Error setting reminder');
             await interaction.editReply({
                 content: '❌ An error occurred while setting the reminder.'
             });
