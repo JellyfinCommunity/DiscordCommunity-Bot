@@ -33,7 +33,7 @@ const REDDIT_RSS_URL = 'https://www.reddit.com/r/JellyfinCommunity/new/.rss';
 const CHECK_INTERVAL = 15 * 60 * 1000; // Check every 15 minutes (in milliseconds)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const POSTED_ITEMS_FILE = path.join(__dirname, 'postedItems.json');
-const MAX_STORED_ITEMS = 10;
+const MAX_STORED_ITEMS = 30;
 
 /**
  * Fetch RSS feed with retry logic and exponential backoff
@@ -126,20 +126,24 @@ async function initRedditFeed(client, channelId) {
         return;
     }
 
-    // Initial load - if no saved items, mark current feed as already posted to avoid spam
+    // On startup: mark all current feed items as already posted to avoid duplicates
+    // Only truly new posts (appearing after startup) will be shared
     try {
         const feed = await fetchWithRetry(REDDIT_RSS_URL);
+        const previousCount = postedItems.size;
 
-        if (postedItems.size === 0 && feed.items.length > 0) {
-            // First run: mark all current posts as already posted
-            feed.items.forEach(item => {
-                postedItems.add(item.link);
-            });
+        // Merge current feed items into posted set
+        feed.items.forEach(item => {
+            postedItems.add(item.link);
+        });
+
+        const newCount = postedItems.size - previousCount;
+        if (newCount > 0) {
             savePostedItems();
-            log.info({ count: postedItems.size }, 'First run: marked existing posts as already posted');
+            log.info({ previousCount, newCount, totalCount: postedItems.size },
+                'Startup: marked current feed items as already posted');
         } else {
-            // Check for any new posts immediately
-            await checkForNewPosts(channel);
+            log.info({ totalCount: postedItems.size }, 'Startup: all feed items already known');
         }
     } catch (error) {
         log.error({ err: error }, 'Error during initial RSS feed load');
