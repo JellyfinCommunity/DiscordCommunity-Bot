@@ -122,6 +122,22 @@ class TimerManager {
     }
 
     /**
+     * Promise-based sleep that can be cancelled during shutdown.
+     * Returns immediately with false if shutdown is in progress.
+     * @param {string} name - Unique identifier for tracking
+     * @param {number} ms - Milliseconds to sleep
+     * @returns {Promise<boolean>} True if completed, false if cancelled/shutdown
+     */
+    sleep(name, ms) {
+        if (this.isShuttingDown) {
+            return Promise.resolve(false);
+        }
+        return new Promise(resolve => {
+            this.setTimeout(name, () => resolve(true), ms);
+        });
+    }
+
+    /**
      * Clear all registered timers (for graceful shutdown).
      */
     clearAll() {
