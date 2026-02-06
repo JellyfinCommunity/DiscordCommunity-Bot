@@ -1,10 +1,14 @@
-import fs from 'fs/promises';
-import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import { EmbedBuilder } from 'discord.js';
 import { COLORS } from './config.js';
+import { timerManager } from './utils/timerManager.js';
+import { updateLogger as log } from './utils/logger.js';
+import { addJitter, addPositiveJitter } from './utils/jitter.js';
+import { truncate, sanitize, sanitizeUrl, EMBED_LIMITS } from './utils/safeEmbed.js';
+import { writeJsonAtomic, writeJsonAtomicSync, readJsonWithRecoverySync, readJsonWithRecovery } from './utils/atomicJson.js';
+import { validateDataFile } from './utils/schemas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = path.join(process.cwd(), 'data.json');
@@ -16,14 +20,7 @@ const UPDATE_CHANNEL_ID = process.env.UPDATE_CHANNEL_ID;
  * Load full posted items data from JSON file
  */
 function loadPostedItemsFile() {
-    try {
-        if (fsSync.existsSync(POSTED_ITEMS_FILE)) {
-            return JSON.parse(fsSync.readFileSync(POSTED_ITEMS_FILE, 'utf8'));
-        }
-    } catch (error) {
-        console.error('Error loading posted items file:', error);
-    }
-    return { redditPosts: [], updatePosts: [] };
+    return readJsonWithRecoverySync(POSTED_ITEMS_FILE, { redditPosts: [], updatePosts: [] });
 }
 
 /**
@@ -31,9 +28,9 @@ function loadPostedItemsFile() {
  */
 function savePostedItemsFile(data) {
     try {
-        fsSync.writeFileSync(POSTED_ITEMS_FILE, JSON.stringify(data, null, 2));
+        writeJsonAtomicSync(POSTED_ITEMS_FILE, data);
     } catch (error) {
-        console.error('Error saving posted items file:', error);
+        log.error({ err: error }, 'Error saving posted items file');
     }
 }
 
@@ -57,32 +54,33 @@ function markUpdatePosted(releaseKey) {
 }
 
 export async function initializeUpdateMonitor(client) {
-    console.log('🔄 Initializing update monitor...');
-    
+    log.info('Initializing update monitor');
+
     if (!UPDATE_CHANNEL_ID) {
-        console.warn('⚠️  UPDATE_CHANNEL_ID not set in environment variables. Update notifications disabled.');
+        log.warn('UPDATE_CHANNEL_ID not set - update notifications disabled');
         return;
     }
 
-    // Schedule checks every 6 hours
-    cron.schedule('0 */6 * * *', async () => {
-        console.log('🔍 Running scheduled update check...');
+    // Schedule checks every hour (using timerManager for graceful shutdown)
+    const job = cron.schedule('0 * * * *', async () => {
+        log.info('Running scheduled update check');
         await checkForUpdates(client);
     });
+    timerManager.registerCron('update-monitor', job);
 
-    // Initial check on startup (after 1 minute)
-    setTimeout(async () => {
-        console.log('🔍 Running initial update check...');
+    // Initial check on startup (after 1-2 minutes with jitter to stagger startup)
+    const initialDelay = addPositiveJitter(60000, 1.0); // 60-120 seconds
+    timerManager.setTimeout('initial-update-check', async () => {
+        log.info('Running initial update check');
         await checkForUpdates(client);
-    }, 60000);
+    }, initialDelay);
 
-    console.log('✅ Update monitor initialized');
+    log.info('Update monitor initialized');
 }
 
 async function checkForUpdates(client) {
     try {
-        const data = await fs.readFile(DATA_FILE, 'utf8');
-        const jsonData = JSON.parse(data);
+        const jsonData = await readJsonWithRecovery(DATA_FILE, { third_party_clients: [], plugins: [], services: [] });
         let hasUpdates = false;
 
         // Check third_party_clients, plugins, and services
@@ -103,7 +101,7 @@ async function checkForUpdates(client) {
 
                         // Check if already posted (duplicate prevention on restart)
                         if (isUpdatePosted(releaseKey)) {
-                            console.log(`⏭️ Skipping already posted release: ${releaseKey}`);
+                            log.debug({ releaseKey }, 'Skipping already posted release');
                             item.lastRelease = {
                                 tag: latestRelease.tag_name,
                                 url: latestRelease.html_url,
@@ -114,7 +112,7 @@ async function checkForUpdates(client) {
                         }
 
                         // New release detected
-                        console.log(`🆕 New release for ${item.name}: ${latestRelease.tag_name}`);
+                        log.info({ name: item.name, tag: latestRelease.tag_name }, 'New release detected');
 
                         // Update item data
                         item.lastRelease = {
@@ -132,23 +130,30 @@ async function checkForUpdates(client) {
                     }
 
                     item.lastChecked = new Date().toISOString();
-                    
-                    // Small delay to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    // Jittered delay between API calls to avoid rate limiting (tracked for graceful shutdown)
+                    const delay = addJitter(1000, 0.5); // 500-1500ms
+                    await timerManager.sleep(`update-check-delay-${item.name}`, delay);
                     
                 } catch (error) {
-                    console.error(`Error checking updates for ${item.name}:`, error.message);
+                    log.error({ err: error, name: item.name }, 'Error checking updates for item');
                 }
             }
         }
 
         if (hasUpdates) {
-            // Save updated data
-            await fs.writeFile(DATA_FILE, JSON.stringify(jsonData, null, 2));
+            // Validate data before saving to prevent corruption
+            const validation = validateDataFile(jsonData);
+            if (!validation.valid) {
+                log.error({ errors: validation.errors }, 'Data validation failed, not saving');
+            } else {
+                // Save updated data atomically
+                await writeJsonAtomic(DATA_FILE, jsonData);
+            }
         }
 
     } catch (error) {
-        console.error('Error during update check:', error);
+        log.error({ err: error }, 'Error during update check');
     }
 }
 
@@ -156,10 +161,10 @@ async function fetchLatestRelease(repoUrl) {
     // Extract owner/repo from GitHub URL
     const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
     if (!match) return null;
-    
+
     const [, owner, repo] = match;
     const url = `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
-    
+
     try {
         const response = await fetch(url, {
             headers: {
@@ -173,6 +178,25 @@ async function fetchLatestRelease(repoUrl) {
                 // No releases found
                 return null;
             }
+
+            // Handle rate limiting
+            if (response.status === 403 || response.status === 429) {
+                const remaining = response.headers.get('X-RateLimit-Remaining');
+                const resetTime = response.headers.get('X-RateLimit-Reset');
+                const retryAfter = response.headers.get('Retry-After');
+
+                log.warn({
+                    status: response.status,
+                    remaining,
+                    resetTime: resetTime ? new Date(parseInt(resetTime) * 1000).toISOString() : null,
+                    retryAfter,
+                    repo: `${owner}/${repo}`
+                }, 'GitHub API rate limited');
+
+                // Return null to skip this check rather than throwing
+                return null;
+            }
+
             throw new Error(`GitHub API responded with ${response.status}`);
         }
 
@@ -186,19 +210,19 @@ async function sendUpdateNotification(client, item, release, category) {
     try {
         const channel = await client.channels.fetch(UPDATE_CHANNEL_ID);
         if (!channel) {
-            console.error('Update channel not found');
+            log.error({ channelId: UPDATE_CHANNEL_ID }, 'Update channel not found');
             return;
         }
 
         const releaseDate = new Date(release.published_at);
-        
+
         // Map category keys to config keys
         const categoryColorMap = {
             third_party_clients: COLORS.clients,
             plugins: COLORS.plugins,
             services: COLORS.services
         };
-        
+
         const categoryInfo = {
             third_party_clients: { icon: "🔧", name: "Third Party Client" },
             plugins: { icon: "🔧", name: "Plugin" },
@@ -207,56 +231,60 @@ async function sendUpdateNotification(client, item, release, category) {
 
         const categoryData = categoryInfo[category] || { icon: "📦", name: "Update" };
 
+        // Sanitize and validate all external data
+        const safeName = truncate(sanitize(item.name), 200);
+        const safeTagName = truncate(sanitize(release.tag_name), 50);
+        const safeReleaseUrl = sanitizeUrl(release.html_url);
+        const safeRepoUrl = sanitizeUrl(item.repo);
+        const safeReleaseBody = truncate(sanitize(release.body || 'No release notes available.'), 500);
+
         const embed = new EmbedBuilder()
             .setColor(categoryColorMap[category] || 0x00FF00)
             .setAuthor({
-                name: `New ${categoryData.name} Release!`,
+                name: truncate(`New ${categoryData.name} Release!`, EMBED_LIMITS.AUTHOR_NAME),
                 iconURL: "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/web/icon-transparent.png"
             })
-            .setTitle(`${categoryData.icon} ${item.name} - ${release.tag_name}`)
-            .setURL(release.html_url)
-            .setDescription(truncateText(release.body || 'No release notes available.', 500))
+            .setTitle(truncate(`${categoryData.icon} ${safeName} - ${safeTagName}`, EMBED_LIMITS.TITLE))
+            .setURL(safeReleaseUrl)
+            .setDescription(safeReleaseBody)
             .addFields(
                 { name: "📅 Released", value: releaseDate.toLocaleDateString(), inline: true },
-                { name: "🔗 Repository", value: `[View on GitHub](${item.repo})`, inline: true }
+                { name: "🔗 Repository", value: safeRepoUrl ? `[View on GitHub](${safeRepoUrl})` : 'N/A', inline: true }
             )
             .setTimestamp(releaseDate)
-            .setFooter({ text: `${categoryData.name} Update` });
+            .setFooter({ text: truncate(`${categoryData.name} Update`, EMBED_LIMITS.FOOTER_TEXT) });
 
         // Add developers for clients
         if (category === 'third_party_clients' && item.developers) {
             const developersText = item.developers
-                .map(dev => dev.link ? `[${dev.name}](${dev.link})` : dev.name)
+                .map(dev => {
+                    const safeDev = sanitize(dev.name || 'Unknown');
+                    const safeLink = sanitizeUrl(dev.link);
+                    return safeLink ? `[${safeDev}](${safeLink})` : safeDev;
+                })
                 .join(', ');
-            embed.addFields({ name: "👨‍💻 Developers", value: developersText, inline: true });
+            embed.addFields({ name: "👨‍💻 Developers", value: truncate(developersText, EMBED_LIMITS.FIELD_VALUE), inline: true });
         }
 
         // Add status link for services
         if (category === 'services' && item.statusUrl) {
-            embed.addFields({ name: "🌐 Status", value: `[Check Status](${item.statusUrl})`, inline: true });
+            const safeStatusUrl = sanitizeUrl(item.statusUrl);
+            if (safeStatusUrl) {
+                embed.addFields({ name: "🌐 Status", value: `[Check Status](${safeStatusUrl})`, inline: true });
+            }
         }
 
         await channel.send({ embeds: [embed] });
-        console.log(`📢 Sent update notification for ${item.name}`);
+        log.info({ name: item.name }, 'Sent update notification');
 
     } catch (error) {
-        console.error(`Error sending notification for ${item.name}:`, error);
+        log.error({ err: error, name: item.name }, 'Error sending notification');
     }
 }
 
-function truncateText(text, maxLength) {
-    if (text.length <= maxLength) return text;
-    
-    // Remove markdown formatting for cleaner truncation
-    const cleanText = text.replace(/[*_`~|]/g, '').replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
-    
-    if (cleanText.length <= maxLength) return cleanText;
-    
-    return cleanText.substring(0, maxLength - 3) + '...';
-}
 
 // Manual check function for testing
 export async function manualUpdateCheck(client) {
-    console.log('🔍 Running manual update check...');
+    log.info('Running manual update check');
     await checkForUpdates(client);
 }

@@ -1,23 +1,39 @@
 // Import RSS Parser
 import Parser from 'rss-parser';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { timerManager } from './utils/timerManager.js';
+import { redditLogger as log } from './utils/logger.js';
+import { addJitter } from './utils/jitter.js';
+import { truncate, sanitize, sanitizeUrl } from './utils/safeEmbed.js';
+import { writeJsonAtomicSync, readJsonWithRecoverySync } from './utils/atomicJson.js';
 
 const parser = new Parser({
     timeout: 20000, // 20 second timeout (faster retries)
     headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; JellyfinCommunityBot/1.0; +https://github.com/JellyfinCommunity)',
-        'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1'
     }
 });
 
 // Configuration
-const REDDIT_RSS_URL = 'https://old.reddit.com/r/JellyfinCommunity/new/.rss';
+const REDDIT_RSS_URL = 'https://www.reddit.com/r/JellyfinCommunity/new/.rss';
 const CHECK_INTERVAL = 15 * 60 * 1000; // Check every 15 minutes (in milliseconds)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const POSTED_ITEMS_FILE = path.join(__dirname, 'postedItems.json');
-const MAX_STORED_ITEMS = 10;
+const MAX_STORED_ITEMS = 30;
 
 /**
  * Fetch RSS feed with retry logic and exponential backoff
@@ -32,8 +48,12 @@ async function fetchWithRetry(url, maxRetries = 3) {
         } catch (error) {
             if (attempt === maxRetries) throw error;
             const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
-            console.log(`RSS fetch failed (attempt ${attempt}/${maxRetries}), retrying in ${delay/1000}s...`);
-            await new Promise(r => setTimeout(r, delay));
+            log.warn({ attempt, maxRetries, delaySeconds: delay / 1000 }, 'RSS fetch failed, retrying');
+            // Use tracked sleep for graceful shutdown
+            const completed = await timerManager.sleep(`rss-retry-${attempt}`, delay);
+            if (!completed) {
+                throw new Error('RSS fetch cancelled due to shutdown');
+            }
         }
     }
 }
@@ -45,14 +65,7 @@ let postedItems = new Set();
  * Load full posted items data from JSON file
  */
 function loadPostedItemsFile() {
-    try {
-        if (fs.existsSync(POSTED_ITEMS_FILE)) {
-            return JSON.parse(fs.readFileSync(POSTED_ITEMS_FILE, 'utf8'));
-        }
-    } catch (error) {
-        console.error('Error loading posted items file:', error);
-    }
-    return { redditPosts: [], updatePosts: [] };
+    return readJsonWithRecoverySync(POSTED_ITEMS_FILE, { redditPosts: [], updatePosts: [] });
 }
 
 /**
@@ -60,9 +73,9 @@ function loadPostedItemsFile() {
  */
 function savePostedItemsFile(data) {
     try {
-        fs.writeFileSync(POSTED_ITEMS_FILE, JSON.stringify(data, null, 2));
+        writeJsonAtomicSync(POSTED_ITEMS_FILE, data);
     } catch (error) {
-        console.error('Error saving posted items file:', error);
+        log.error({ err: error }, 'Error saving posted items file');
     }
 }
 
@@ -73,9 +86,9 @@ function loadPostedItems() {
     try {
         const data = loadPostedItemsFile();
         postedItems = new Set(data.redditPosts || []);
-        console.log(`Loaded ${postedItems.size} previously posted Reddit items from file`);
+        log.info({ count: postedItems.size }, 'Loaded previously posted Reddit items');
     } catch (error) {
-        console.error('Error loading posted items:', error);
+        log.error({ err: error }, 'Error loading posted items');
         postedItems = new Set();
     }
 }
@@ -91,7 +104,7 @@ function savePostedItems() {
         data.redditPosts = itemsArray;
         savePostedItemsFile(data);
     } catch (error) {
-        console.error('Error saving posted items:', error);
+        log.error({ err: error }, 'Error saving posted items');
     }
 }
 
@@ -101,7 +114,7 @@ function savePostedItems() {
  * @param {string} channelId - Discord channel ID where posts should be sent
  */
 async function initRedditFeed(client, channelId) {
-    console.log('Starting Reddit RSS feed monitor...');
+    log.info('Starting Reddit RSS feed monitor');
 
     // Load previously posted items from file
     loadPostedItems();
@@ -109,35 +122,44 @@ async function initRedditFeed(client, channelId) {
     // Get the target Discord channel
     const channel = await client.channels.fetch(channelId);
     if (!channel) {
-        console.error(`Channel ${channelId} not found!`);
+        log.error({ channelId }, 'Channel not found');
         return;
     }
 
-    // Initial load - if no saved items, mark current feed as already posted to avoid spam
+    // On startup: mark all current feed items as already posted to avoid duplicates
+    // Only truly new posts (appearing after startup) will be shared
     try {
         const feed = await fetchWithRetry(REDDIT_RSS_URL);
+        const previousCount = postedItems.size;
 
-        if (postedItems.size === 0 && feed.items.length > 0) {
-            // First run: mark all current posts as already posted
-            feed.items.forEach(item => {
-                postedItems.add(item.link);
-            });
+        // Merge current feed items into posted set
+        feed.items.forEach(item => {
+            postedItems.add(item.link);
+        });
+
+        const newCount = postedItems.size - previousCount;
+        if (newCount > 0) {
             savePostedItems();
-            console.log(`First run: marked ${postedItems.size} existing posts as already posted`);
+            log.info({ previousCount, newCount, totalCount: postedItems.size },
+                'Startup: marked current feed items as already posted');
         } else {
-            // Check for any new posts immediately
-            await checkForNewPosts(channel);
+            log.info({ totalCount: postedItems.size }, 'Startup: all feed items already known');
         }
     } catch (error) {
-        console.error('Error during initial RSS feed load:', error);
+        log.error({ err: error }, 'Error during initial RSS feed load');
     }
 
-    // Start periodic checking
-    setInterval(async () => {
-        await checkForNewPosts(channel);
-    }, CHECK_INTERVAL);
+    // Start periodic checking with jitter (using timerManager for graceful shutdown)
+    const scheduleNextCheck = () => {
+        const jitteredInterval = addJitter(CHECK_INTERVAL, 0.15); // 15% jitter
+        timerManager.setTimeout('reddit-rss-check', async () => {
+            await checkForNewPosts(channel);
+            scheduleNextCheck(); // Schedule next check after completion
+        }, jitteredInterval);
+    };
+    scheduleNextCheck();
 
-    console.log(`Reddit feed monitor active. Checking every ${CHECK_INTERVAL / 1000 / 60} minutes.`);
+    log.info({ intervalMinutes: CHECK_INTERVAL / 1000 / 60, jitter: '15%' }, 'Reddit feed monitor active');
 }
 
 /**
@@ -150,25 +172,31 @@ async function postItem(channel, item) {
     const { imageUrl, textContent } = extractContent(item.content || item.contentSnippet || '');
 
     // Extract flair from categories if available
-    const flair = item.categories && item.categories.length > 0 ? item.categories[0] : null;
+    const flair = item.categories && item.categories.length > 0 ? sanitize(item.categories[0]) : null;
 
-    // Clean up author name
-    const authorName = (item.author || 'Unknown').replace(/^\/?u\//, '');
+    // Clean up and sanitize author name
+    const authorName = sanitize((item.author || 'Unknown').replace(/^\/?u\//, ''));
 
-    // Build title with flair prefix if available
-    const title = flair ? `[${flair}] ${item.title}` : item.title;
+    // Build title with flair prefix if available (truncate to Discord limit)
+    const rawTitle = flair ? `[${flair}] ${item.title}` : item.title;
+    const title = truncate(sanitize(rawTitle), 256);
 
-    // Create Discord embed message
+    // Validate URLs
+    const itemUrl = sanitizeUrl(item.link);
+    const authorUrl = sanitizeUrl(`https://www.reddit.com/user/${encodeURIComponent(authorName)}`);
+    const safeImageUrl = imageUrl ? sanitizeUrl(imageUrl) : null;
+
+    // Create Discord embed message with safe values
     const embed = {
         color: 0xFF5700, // Reddit orange
         title: title,
-        url: item.link,
+        url: itemUrl,
         author: {
-            name: `u/${authorName}`,
-            url: `https://www.reddit.com/user/${authorName}`,
+            name: truncate(`u/${authorName}`, 256),
+            url: authorUrl,
             icon_url: 'https://www.redditstatic.com/avatars/defaults/v2/avatar_default_1.png',
         },
-        description: textContent || undefined,
+        description: textContent ? truncate(textContent, 4096) : undefined,
         timestamp: new Date(item.pubDate),
         footer: {
             text: 'r/JellyfinCommunity',
@@ -176,9 +204,9 @@ async function postItem(channel, item) {
         },
     };
 
-    // Add image if found (use large image, not thumbnail)
-    if (imageUrl) {
-        embed.image = { url: imageUrl };
+    // Add image if found and valid (use large image, not thumbnail)
+    if (safeImageUrl) {
+        embed.image = { url: safeImageUrl };
     }
 
     // Send to Discord
@@ -199,17 +227,20 @@ async function checkForNewPosts(channel) {
             .reverse();
 
         if (newItems.length > 0) {
-            console.log(`Found ${newItems.length} new Reddit post(s)`);
+            log.info({ count: newItems.length }, 'Found new Reddit posts');
         }
 
-        for (const item of newItems) {
+        for (let i = 0; i < newItems.length; i++) {
+            const item = newItems[i];
             // Mark as posted immediately to avoid duplicates
             postedItems.add(item.link);
 
             await postItem(channel, item);
 
-            // Small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Small delay to avoid rate limiting (tracked for graceful shutdown)
+            if (i < newItems.length - 1) {
+                await timerManager.sleep(`rss-post-delay-${i}`, 1000);
+            }
         }
 
         // Save to file if we posted anything
@@ -217,7 +248,7 @@ async function checkForNewPosts(channel) {
             savePostedItems();
         }
     } catch (error) {
-        console.error('Error checking RSS feed:', error);
+        log.error({ err: error }, 'Error checking RSS feed');
     }
 }
 

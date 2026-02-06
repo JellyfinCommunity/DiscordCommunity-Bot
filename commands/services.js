@@ -1,8 +1,9 @@
 import { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, ComponentType } from "discord.js";
-import fs from 'fs/promises';
 import path from 'path';
-import { COLORS, CATEGORY_INFO, isFeaturedProject, sortByFeatured } from '../config.js';
+import { COLORS, CATEGORY_INFO, isFeaturedProject, sortByFeatured, DISCORD_SELECT_MENU_LIMIT } from '../config.js';
 import { createProjectEmbed } from '../embedHelper.js';
+import { commandLogger as log } from '../utils/logger.js';
+import { readJsonWithRecovery } from '../utils/atomicJson.js';
 
 const DATA_FILE = path.join(process.cwd(), 'data.json');
 
@@ -16,8 +17,7 @@ export default {
         await interaction.deferReply();
 
         try {
-            const data = await fs.readFile(DATA_FILE, 'utf8');
-            const jsonData = JSON.parse(data);
+            const jsonData = await readJsonWithRecovery(DATA_FILE, { services: [] });
             const services = jsonData.services || [];
 
             if (services.length === 0) {
@@ -30,7 +30,7 @@ export default {
             const sortedServices = sortByFeatured(services);
             const categoryInfo = CATEGORY_INFO.services;
 
-            const options = sortedServices.slice(0, 25).map(service => {
+            const options = sortedServices.slice(0, DISCORD_SELECT_MENU_LIMIT).map(service => {
                 const isFeatured = isFeaturedProject(service);
                 return {
                     label: `${isFeatured ? '⭐ ' : ''}${service.name.substring(0, 97)}`,
@@ -91,14 +91,23 @@ export default {
                 });
 
             } catch (error) {
-                await interaction.editReply({
-                    content: "⏰ Selection timed out. Use `/services` to try again.",
-                    components: []
-                });
+                // Only show timeout message for collector timeout errors
+                if (error.code === 'InteractionCollectorError' || error.message?.includes('time')) {
+                    await interaction.editReply({
+                        content: "⏰ Selection timed out. Use `/services` to try again.",
+                        components: []
+                    });
+                } else {
+                    log.error({ err: error }, 'Error during service selection');
+                    await interaction.editReply({
+                        content: "❌ An error occurred during selection.",
+                        components: []
+                    });
+                }
             }
 
         } catch (error) {
-            console.error('Error executing services command:', error);
+            log.error({ err: error }, 'Error executing services command');
             await interaction.editReply({
                 content: "❌ An error occurred while fetching service information."
             });

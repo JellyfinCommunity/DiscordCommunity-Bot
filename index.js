@@ -6,13 +6,21 @@ import { Client, Collection, GatewayIntentBits, REST, Routes, MessageFlags } fro
 import { initializeReminders } from './reminderManager.js';
 import { initializeUpdateMonitor } from './updateMonitor.js';
 import { initRedditFeed } from './redditRssFeed.js';
+import { validateEnv } from './utils/validateEnv.js';
+import { initGlobalErrorHandlers, wrapEventHandler } from './utils/errorHandler.js';
+import { initGracefulShutdown } from './utils/shutdown.js';
+import { botLogger as log } from './utils/logger.js';
+import { rateLimiter } from './utils/rateLimiter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+// Validate environment variables before anything else
+const ENV = validateEnv();
+const { TOKEN, CLIENT_ID, GUILD_ID } = ENV;
+
+// Initialize global error handlers immediately after validation
+initGlobalErrorHandlers();
 
 // Client with correct intents
 const client = new Client({
@@ -40,12 +48,15 @@ for (const file of commandFiles) {
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 client.once('ready', async () => {
-  console.log(`✅ Bot is online as ${client.user.tag}`);
+  log.info({ tag: client.user.tag }, 'Bot is online');
 
-  // Initialize Reddit RSS feed monitor
-  const redditChannelId = process.env.REDDIT_CHANNEL_ID || 'YOUR_CHANNEL_ID';
-  initRedditFeed(client, redditChannelId);   
-  
+  // Initialize graceful shutdown handlers
+  initGracefulShutdown(client);
+
+  // Initialize Reddit RSS feed monitor (only if channel ID is configured)
+  if (ENV.REDDIT_CHANNEL_ID) {
+    initRedditFeed(client, ENV.REDDIT_CHANNEL_ID);
+  }
 
   // Initialize reminder system
   await initializeReminders(client);
@@ -54,29 +65,45 @@ client.once('ready', async () => {
   await initializeUpdateMonitor(client);
 
   try {
-    console.log('📥 Registering slash commands...');
+    log.info('Registering slash commands');
     await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
       { body: commands }
     );
-    console.log('✅ Slash commands registered.');
+    log.info({ commandCount: commands.length }, 'Slash commands registered');
   } catch (error) {
-    console.error('❌ Error registering commands:', error);
+    log.error({ err: error }, 'Error registering commands');
   }
 });
 
 // Handle slash commands and autocomplete
-client.on('interactionCreate', async interaction => {
+client.on('interactionCreate', wrapEventHandler(async interaction => {
   if (interaction.isCommand()) {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
+    // Check rate limit
+    const rateCheck = rateLimiter.check(interaction.user.id, interaction.commandName);
+    if (!rateCheck.allowed) {
+      log.warn({ userId: interaction.user.id, command: interaction.commandName }, 'Command rate limited');
+      await interaction.reply({
+        content: `⏱️ ${rateCheck.message}`,
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    // Warn if approaching limit
+    if (rateCheck.warning) {
+      log.info({ userId: interaction.user.id, command: interaction.commandName }, 'User approaching rate limit');
+    }
+
     try {
       await command.execute(interaction);
     } catch (error) {
-      console.error(`Error executing command ${interaction.commandName}:`, error);
+      log.error({ err: error, command: interaction.commandName }, 'Error executing command');
       // Try to respond - handle both deferred and non-deferred states
-      const errorMessage = { content: 'There was an error executing that command.', flags: MessageFlags.Ephemeral };
+      const errorMessage = { content: '❌ There was an error executing that command.', flags: MessageFlags.Ephemeral };
       try {
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply(errorMessage);
@@ -84,7 +111,7 @@ client.on('interactionCreate', async interaction => {
           await interaction.reply(errorMessage);
         }
       } catch (replyError) {
-        console.error('Failed to send error reply:', replyError);
+        log.error({ err: replyError }, 'Failed to send error reply');
       }
     }
   } else if (interaction.isAutocomplete()) {
@@ -94,13 +121,13 @@ client.on('interactionCreate', async interaction => {
     try {
       await command.autocomplete(interaction);
     } catch (error) {
-      console.error(error);
+      log.error({ err: error, command: interaction.commandName }, 'Autocomplete error');
     }
   }
-});
+}, 'interactionCreate'));
 
 // Handle piracy keyword detection
-client.on('messageCreate', async message => {
+client.on('messageCreate', wrapEventHandler(async message => {
   if (message.author.bot) return;
 
   const hasPiracy = hasPiracyKeywords(message.content);
@@ -110,10 +137,11 @@ client.on('messageCreate', async message => {
       await command.execute(message);
     }
   }
-});
+}, 'messageCreate'));
 
 // Keyword check
 function hasPiracyKeywords(text) {
+  if (!text || typeof text !== 'string') return false;
   const lowerText = text.trim().toLowerCase();
   const piracyKeywords = [
     "1fichier", "123movies", "1337x", "alldebrid", "anonfiles",

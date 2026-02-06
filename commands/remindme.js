@@ -1,51 +1,64 @@
 import { SlashCommandBuilder } from 'discord.js';
-import fs from 'fs/promises';
-import path from 'path';
+import { timerManager } from '../utils/timerManager.js';
+import { reminderLogger as log } from '../utils/logger.js';
+import { sanitizeString } from '../utils/sanitize.js';
+import { addReminder, removeReminder } from '../reminderManager.js';
 
-const TIME_LIMITS = {
-    minutes: 1440, // 24 hours
-    hours: 168,    // 1 week
-    days: 365,     // 1 year
-    weeks: 52      // 1 year
-};
-
-const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
-
-// Load reminders from file
-async function loadReminders() {
-    try {
-        const data = await fs.readFile(REMINDERS_FILE, 'utf8');
-        return JSON.parse(data);
-    } catch (error) {
-        if (error.code === 'ENOENT') {
-            return [];
-        }
-        console.error('Error loading reminders:', error);
-        return [];
+/**
+ * Validate reminder text
+ * @param {string} text - Reminder text
+ * @returns {{ valid: boolean, sanitized?: string, error?: string }}
+ */
+function validateReminderText(text) {
+    if (!text || typeof text !== 'string') {
+        return { valid: false, error: 'Reminder text is required' };
     }
-}
 
-// Save reminders to file
-async function saveReminders(reminders) {
-    try {
-        await fs.writeFile(REMINDERS_FILE, JSON.stringify(reminders, null, 2));
-    } catch (error) {
-        console.error('Error saving reminders:', error);
+    const sanitized = sanitizeString(text, {
+        maxLength: 500,
+        allowNewlines: false,
+        allowMarkdown: true
+    });
+
+    if (sanitized.length < 1) {
+        return { valid: false, error: 'Reminder text cannot be empty' };
     }
+
+    if (sanitized.length > 500) {
+        return { valid: false, error: 'Reminder text cannot exceed 500 characters' };
+    }
+
+    return { valid: true, sanitized };
 }
 
-// Add reminder
-async function addReminder(reminder) {
-    const reminders = await loadReminders();
-    reminders.push(reminder);
-    await saveReminders(reminders);
-}
+/**
+ * Validate time amount for reminders
+ * @param {number} amount - Time amount
+ * @param {string} unit - Time unit (minutes, hours, days, weeks)
+ * @returns {{ valid: boolean, ms?: number, error?: string }}
+ */
+function validateTimeAmount(amount, unit) {
+    const limits = {
+        minutes: { max: 1440, multiplier: 60 * 1000 },
+        hours: { max: 168, multiplier: 60 * 60 * 1000 },
+        days: { max: 365, multiplier: 24 * 60 * 60 * 1000 },
+        weeks: { max: 52, multiplier: 7 * 24 * 60 * 60 * 1000 }
+    };
 
-// Remove reminder
-async function removeReminder(reminderId) {
-    const reminders = await loadReminders();
-    const filtered = reminders.filter(r => r.id !== reminderId);
-    await saveReminders(filtered);
+    if (!Number.isInteger(amount) || amount < 1) {
+        return { valid: false, error: 'Time amount must be a positive integer' };
+    }
+
+    const unitConfig = limits[unit];
+    if (!unitConfig) {
+        return { valid: false, error: 'Invalid time unit' };
+    }
+
+    if (amount > unitConfig.max) {
+        return { valid: false, error: `Cannot set reminder for more than ${unitConfig.max} ${unit}` };
+    }
+
+    return { valid: true, ms: amount * unitConfig.multiplier };
 }
 
 export default {
@@ -80,32 +93,34 @@ export default {
             const timeUnit = interaction.options.getString('unit');
             const userId = interaction.user.id;
             const channel = interaction.channel;
-            const text = interaction.options.getString('text');
+            const rawText = interaction.options.getString('text');
+
+            // Validate and sanitize reminder text
+            const textValidation = validateReminderText(rawText);
+            if (!textValidation.valid) {
+                return await interaction.editReply({
+                    content: `❌ ${textValidation.error}`
+                });
+            }
+            const text = textValidation.sanitized;
+
+            // Validate time amount
+            const timeValidation = validateTimeAmount(timeAmount, timeUnit);
+            if (!timeValidation.valid) {
+                return await interaction.editReply({
+                    content: `❌ ${timeValidation.error}`
+                });
+            }
 
             // Check bot permissions
-            if (!channel.permissionsFor(channel.guild.members.me).has('ViewChannel') || 
+            if (!channel.permissionsFor(channel.guild.members.me).has('ViewChannel') ||
                 !channel.permissionsFor(channel.guild.members.me).has('SendMessages')) {
                 return await interaction.editReply({
                     content: '❌ I cannot send messages in this channel. Please check my permissions.'
                 });
             }
 
-            // Check time limits
-            if (timeAmount > TIME_LIMITS[timeUnit]) {
-                return await interaction.editReply({
-                    content: `❌ You cannot set a reminder for more than ${TIME_LIMITS[timeUnit]} ${timeUnit}!`
-                });
-            }
-
-            // Calculate reminder time
-            const msMultiplier = {
-                minutes: 60 * 1000,
-                hours: 60 * 60 * 1000,
-                days: 24 * 60 * 60 * 1000,
-                weeks: 7 * 24 * 60 * 60 * 1000
-            };
-
-            const ms = timeAmount * msMultiplier[timeUnit];
+            const ms = timeValidation.ms;
             const reminderTime = Date.now() + ms;
             const reminderId = `${userId}_${reminderTime}`;
 
@@ -118,7 +133,7 @@ export default {
                 guildId: interaction.guildId
             };
 
-            // Save reminder
+            // Save reminder (mutex-protected via reminderManager)
             await addReminder(reminder);
 
             const timeString = `${timeAmount} ${timeUnit}`;
@@ -126,8 +141,8 @@ export default {
                 content: `✅ I will remind you about "${text}" in ${timeString}`
             });
 
-            // Set timeout for reminder
-            setTimeout(async () => {
+            // Set timeout for reminder (using timerManager for cleanup)
+            timerManager.setTimeout(`reminder-${reminderId}`, async () => {
                 try {
                     const channel = await interaction.client.channels.fetch(reminder.channelId);
                     await channel.send({
@@ -136,12 +151,12 @@ export default {
                     });
                     await removeReminder(reminderId);
                 } catch (error) {
-                    console.error('Error sending reminder:', error);
+                    log.error({ err: error, reminderId }, 'Error sending reminder');
                     await removeReminder(reminderId);
                 }
             }, ms);
         } catch (error) {
-            console.error('Error setting reminder:', error);
+            log.error({ err: error, userId: interaction.user.id }, 'Error setting reminder');
             await interaction.editReply({
                 content: '❌ An error occurred while setting the reminder.'
             });

@@ -1,5 +1,8 @@
 // Shared configuration for the Jellyfin Community Bot
 
+// Discord API limits
+export const DISCORD_SELECT_MENU_LIMIT = 25;
+
 // Featured projects - developers active on this server
 export const FEATURED_PROJECTS = [
     'afinity', 'anchorr', 'jellybuddy', 'jellyfin-enhanced', 'kefin-tweaks',
