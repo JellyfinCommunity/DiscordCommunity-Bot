@@ -7,7 +7,8 @@ import { sanitizeString } from './utils/sanitize.js';
 import { writeJsonAtomic, readJsonWithRecovery } from './utils/atomicJson.js';
 import { reminderMutex } from './utils/asyncMutex.js';
 
-const REMINDERS_FILE = path.join(process.cwd(), 'reminders.json');
+const DATA_DIR = path.join(process.cwd(), 'data');
+const REMINDERS_FILE = path.join(DATA_DIR, 'reminders.json');
 
 /**
  * Remove a reminder from the file (mutex-protected)

@@ -5,7 +5,7 @@ import { createProjectEmbed } from '../embedHelper.js';
 import { commandLogger as log } from '../utils/logger.js';
 import { readJsonWithRecovery } from '../utils/atomicJson.js';
 
-const DATA_FILE = path.join(process.cwd(), 'data.json');
+const DATA_FILE = path.join(process.cwd(), 'data', 'data.json');
 
 export default {
     data: new SlashCommandBuilder()

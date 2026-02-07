@@ -1,7 +1,6 @@
 // Import RSS Parser
 import Parser from 'rss-parser';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { timerManager } from './utils/timerManager.js';
 import { redditLogger as log } from './utils/logger.js';
 import { addJitter } from './utils/jitter.js';
@@ -31,8 +30,8 @@ const parser = new Parser({
 // Configuration
 const REDDIT_RSS_URL = 'https://www.reddit.com/r/JellyfinCommunity/new/.rss';
 const CHECK_INTERVAL = 15 * 60 * 1000; // Check every 15 minutes (in milliseconds)
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const POSTED_ITEMS_FILE = path.join(__dirname, 'postedItems.json');
+const DATA_DIR = path.join(process.cwd(), 'data');
+const POSTED_ITEMS_FILE = path.join(DATA_DIR, 'postedItems.json');
 const MAX_STORED_ITEMS = 30;
 
 /**

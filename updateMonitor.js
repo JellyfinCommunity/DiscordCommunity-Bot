@@ -1,5 +1,4 @@
 import path from 'path';
-import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import { EmbedBuilder } from 'discord.js';
 import { COLORS } from './config.js';
@@ -10,9 +9,60 @@ import { truncate, sanitize, sanitizeUrl, EMBED_LIMITS } from './utils/safeEmbed
 import { writeJsonAtomic, writeJsonAtomicSync, readJsonWithRecoverySync, readJsonWithRecovery } from './utils/atomicJson.js';
 import { validateDataFile } from './utils/schemas.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = path.join(process.cwd(), 'data.json');
-const POSTED_ITEMS_FILE = path.join(__dirname, 'postedItems.json');
+const FETCH_TIMEOUT = 15000; // 15 second timeout
+const MAX_RETRIES = 3;
+
+/**
+ * Fetch with timeout support
+ * @param {string} url - URL to fetch
+ * @param {object} options - fetch options
+ * @param {number} timeout - timeout in ms
+ * @returns {Promise<Response>}
+ */
+async function fetchWithTimeout(url, options = {}, timeout = FETCH_TIMEOUT) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        return response;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+/**
+ * Fetch with retry logic and exponential backoff
+ * @param {string} url - URL to fetch
+ * @param {object} options - fetch options
+ * @param {number} maxRetries - maximum retry attempts
+ * @returns {Promise<Response>}
+ */
+async function fetchWithRetry(url, options = {}, maxRetries = MAX_RETRIES) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await fetchWithTimeout(url, options);
+        } catch (error) {
+            if (attempt === maxRetries) throw error;
+
+            const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+            log.warn({ attempt, maxRetries, delaySeconds: delay / 1000, error: error.message }, 'GitHub fetch failed, retrying');
+
+            // Use tracked sleep for graceful shutdown
+            const completed = await timerManager.sleep(`github-retry-${attempt}`, delay);
+            if (!completed) {
+                throw new Error('GitHub fetch cancelled due to shutdown');
+            }
+        }
+    }
+}
+
+const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_FILE = path.join(DATA_DIR, 'data.json');
+const POSTED_ITEMS_FILE = path.join(DATA_DIR, 'postedItems.json');
 const MAX_STORED_UPDATES = 10;
 const UPDATE_CHANNEL_ID = process.env.UPDATE_CHANNEL_ID;
 
@@ -166,7 +216,7 @@ async function fetchLatestRelease(repoUrl) {
     const url = `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
 
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithRetry(url, {
             headers: {
                 'User-Agent': 'Jellyfin-Community-Bot',
                 'Accept': 'application/vnd.github.v3+json'

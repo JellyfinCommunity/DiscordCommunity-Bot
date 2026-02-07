@@ -26,8 +26,11 @@ temp/
 
 docker-compose.yml
 
-reminders.json
-postedItems.json
+# Data directory (except data.json which is configuration)
+data/reminders.json
+data/postedItems.json
+data/*.bak
+data/*.tmp
 
 # Claude Code
 .claude/
