@@ -1,4 +1,3 @@
-import path from 'path';
 import cron from 'node-cron';
 import { EmbedBuilder } from 'discord.js';
 import { COLORS } from './config.js';
@@ -8,6 +7,7 @@ import { addJitter, addPositiveJitter } from './utils/jitter.js';
 import { truncate, sanitize, sanitizeUrl, EMBED_LIMITS } from './utils/safeEmbed.js';
 import { writeJsonAtomic, writeJsonAtomicSync, readJsonWithRecoverySync, readJsonWithRecovery } from './utils/atomicJson.js';
 import { validateDataFile } from './utils/schemas.js';
+import { DATA_FILE, POSTED_ITEMS_FILE } from './utils/paths.js';
 
 const FETCH_TIMEOUT = 15000; // 15 second timeout
 const MAX_RETRIES = 3;
@@ -48,11 +48,11 @@ async function fetchWithRetry(url, options = {}, maxRetries = MAX_RETRIES) {
         } catch (error) {
             if (attempt === maxRetries) throw error;
 
-            const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30000);
             log.warn({ attempt, maxRetries, delaySeconds: delay / 1000, error: error.message }, 'GitHub fetch failed, retrying');
 
             // Use tracked sleep for graceful shutdown
-            const completed = await timerManager.sleep(`github-retry-${attempt}`, delay);
+            const completed = await timerManager.sleep(`github-retry-${url}-${attempt}`, delay);
             if (!completed) {
                 throw new Error('GitHub fetch cancelled due to shutdown');
             }
@@ -60,9 +60,6 @@ async function fetchWithRetry(url, options = {}, maxRetries = MAX_RETRIES) {
     }
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DATA_FILE = path.join(DATA_DIR, 'data.json');
-const POSTED_ITEMS_FILE = path.join(DATA_DIR, 'postedItems.json');
 const MAX_STORED_UPDATES = 10;
 const UPDATE_CHANNEL_ID = process.env.UPDATE_CHANNEL_ID;
 

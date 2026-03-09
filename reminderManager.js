@@ -1,4 +1,3 @@
-import path from 'path';
 import { PermissionFlagsBits } from 'discord.js';
 import { timerManager } from './utils/timerManager.js';
 import { reminderLogger as log } from './utils/logger.js';
@@ -6,9 +5,7 @@ import { validateReminders } from './utils/schemas.js';
 import { sanitizeString } from './utils/sanitize.js';
 import { writeJsonAtomic, readJsonWithRecovery } from './utils/atomicJson.js';
 import { reminderMutex } from './utils/asyncMutex.js';
-
-const DATA_DIR = path.join(process.cwd(), 'data');
-const REMINDERS_FILE = path.join(DATA_DIR, 'reminders.json');
+import { REMINDERS_FILE } from './utils/paths.js';
 
 /**
  * Remove a reminder from the file (mutex-protected)

@@ -1,11 +1,9 @@
 import { SlashCommandBuilder, EmbedBuilder, StringSelectMenuBuilder, ActionRowBuilder, ComponentType } from "discord.js";
-import path from 'path';
 import { COLORS, CATEGORY_INFO, isFeaturedProject, sortByFeatured, DISCORD_SELECT_MENU_LIMIT } from '../config.js';
 import { createProjectEmbed } from '../embedHelper.js';
 import { commandLogger as log } from '../utils/logger.js';
 import { readJsonWithRecovery } from '../utils/atomicJson.js';
-
-const DATA_FILE = path.join(process.cwd(), 'data', 'data.json');
+import { DATA_FILE } from '../utils/paths.js';
 
 export default {
     data: new SlashCommandBuilder()
