@@ -1,11 +1,11 @@
 // Import RSS Parser
 import Parser from 'rss-parser';
-import path from 'path';
 import { timerManager } from './utils/timerManager.js';
 import { redditLogger as log } from './utils/logger.js';
 import { addJitter } from './utils/jitter.js';
 import { truncate, sanitize, sanitizeUrl } from './utils/safeEmbed.js';
 import { writeJsonAtomicSync, readJsonWithRecoverySync } from './utils/atomicJson.js';
+import { POSTED_ITEMS_FILE } from './utils/paths.js';
 
 const parser = new Parser({
     timeout: 20000, // 20 second timeout (faster retries)
@@ -30,8 +30,6 @@ const parser = new Parser({
 // Configuration
 const REDDIT_RSS_URL = 'https://www.reddit.com/r/JellyfinCommunity/new/.rss';
 const CHECK_INTERVAL = 15 * 60 * 1000; // Check every 15 minutes (in milliseconds)
-const DATA_DIR = path.join(process.cwd(), 'data');
-const POSTED_ITEMS_FILE = path.join(DATA_DIR, 'postedItems.json');
 const MAX_STORED_ITEMS = 30;
 
 /**
@@ -46,10 +44,10 @@ async function fetchWithRetry(url, maxRetries = 3) {
             return await parser.parseURL(url);
         } catch (error) {
             if (attempt === maxRetries) throw error;
-            const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30000);
             log.warn({ attempt, maxRetries, delaySeconds: delay / 1000 }, 'RSS fetch failed, retrying');
             // Use tracked sleep for graceful shutdown
-            const completed = await timerManager.sleep(`rss-retry-${attempt}`, delay);
+            const completed = await timerManager.sleep(`rss-retry-${url}-${attempt}`, delay);
             if (!completed) {
                 throw new Error('RSS fetch cancelled due to shutdown');
             }
