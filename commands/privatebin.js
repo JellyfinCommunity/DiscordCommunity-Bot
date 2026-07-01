@@ -1,26 +1,26 @@
-import { SlashCommandBuilder, EmbedBuilder } from "discord.js"; 
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 
 export default {
-  data: new SlashCommandBuilder()
-    .setName("privatebin")
-    .setDescription("Share logs, code snippets, or larger text using PrivateBin"),
-    async execute(interaction) {
-        const embed = new EmbedBuilder()
-            .setColor(0x2ECC71)
-            .setAuthor({
-                name: "PrivateBin",
-                iconURL: "https://privatebin.info/img/logo.png",
-                url: "https://privatebin.net/"
-            })
-            .setTitle("📋 Share Text Securely")
-            .setDescription("Use PrivateBin to share logs, code snippets, or any larger text securely")
-            .addFields({
-                name: "🔗 PrivateBin",
-                value: "[privatebin.net](https://privatebin.net/)",
-                inline: false
-            })
-            .setFooter({ text: "Encrypted, zero-knowledge paste service" });
+	data: new SlashCommandBuilder()
+		.setName('pastebin')
+		.setDescription('Share logs and code'),
+	async execute(interaction) {
+		const embed = new EmbedBuilder()
+			.setColor(0x9B59B6)
+			.setAuthor({
+				name: 'PrivateBin',
+				iconURL: 'https://privatebin.info/img/logo.png',
+				url: 'https://privatebin.net/',
+			})
+			.setTitle('Share Text with PrivateBin')
+			.setDescription(
+				'Use https://privatebin.net for logs, code, configs, or other long text instead of posting it directly in chat.'
+			)
+			.addFields({
+				name: 'Before you paste',
+				value: 'Remove passwords, API keys, tokens, IPs, domains, and other personal or sensitive information.',
+			});
 
-        await interaction.reply({ embeds: [embed] });
-    },
+		await interaction.reply({ embeds: [embed] });
+	},
 };
